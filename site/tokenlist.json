@@ -1,0 +1,17 @@
+{
+  "name": "MaharGroup",
+  "timestamp": "2026-10-29T00:00:00.000Z",
+  "version": { "major": 1, "minor": 0, "patch": 0 },
+  "logoURI": "https://token.maharpos.shop/logo-256.png",
+  "keywords": ["maharpos", "maharshwe", "myanmar"],
+  "tokens": [
+    {
+      "chainId": 56,
+      "address": "0xc117986212033937fa52F0609843754C8f7DBacD",
+      "name": "MaharGroup",
+      "symbol": "MGR",
+      "decimals": 18,
+      "logoURI": "https://token.maharpos.shop/logo-256.png"
+    }
+  ]
+}

@@ -15,6 +15,17 @@ fs.mkdirSync(dist, { recursive: true });
 for (const e of fs.readdirSync(dist)) fs.rmSync(path.join(dist, e), { recursive: true, force: true });
 fs.mkdirSync(path.join(dist, "wallet", "vendor"), { recursive: true });
 
+// The token list is fetched by wallets and DEXes, so it must match the official schema.
+{
+  const Ajv = require("ajv");
+  const addFormats = require("ajv-formats");
+  const schema = require("@uniswap/token-lists/dist/tokenlist.schema.json");
+  const ajv = new Ajv({ allErrors: true, verbose: true });
+  addFormats(ajv);
+  const list = JSON.parse(fs.readFileSync(p("site", "tokenlist.json"), "utf8"));
+  if (!ajv.validate(schema, list)) throw new Error("site/tokenlist.json: " + ajv.errorsText());
+}
+
 for (const f of fs.readdirSync(p("site"))) fs.copyFileSync(p("site", f), path.join(dist, f));
 
 const libs = {
