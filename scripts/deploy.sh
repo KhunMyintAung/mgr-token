@@ -3,15 +3,22 @@
 #
 #   npm run deploy
 #
+# The server comes from $HOST or, if unset, from .deploy-host (one line, e.g. root@1.2.3.4).
+# .deploy-host is git-ignored so the public repo does not advertise the server.
+#
 # Static files only: they go to /var/www/token-maharpos/releases/<time>, `current` points
 # at the newest, and the last 3 releases are kept for rollback. The first deploy also gets
 # a Let's Encrypt certificate once the token.maharpos.shop DNS record points here.
 # nginx is only reloaded after `nginx -t` passes, so a bad config never takes the POS apps down.
 set -euo pipefail
 
-HOST="${HOST:-root@SERVER_IP}"
 DOMAIN=token.maharpos.shop
 cd "$(dirname "$0")/.."
+if [ -z "${HOST:-}" ] && [ -f .deploy-host ]; then HOST=$(tr -d ' \r\n' < .deploy-host); fi
+if [ -z "${HOST:-}" ]; then
+  echo "Set the server first: echo root@<server-ip> > .deploy-host" >&2
+  exit 1
+fi
 
 npm run --silent build:dist
 RELEASE=$(date -u +%Y%m%d%H%M%S)

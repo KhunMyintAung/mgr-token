@@ -4,3 +4,5 @@ dist/
 .env
 .env.*
 *.log
+# Deploy target (see scripts/deploy.sh); kept out of the public repo.
+.deploy-host
