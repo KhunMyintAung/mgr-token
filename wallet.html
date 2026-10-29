@@ -172,6 +172,26 @@
       </div>
       <div class="err" id="sendErr"></div>
       <div id="sendResult" class="muted"></div>
+
+      <h2 style="margin-top:26px">Airdrop · အများဆီ တစ်ခါတည်း ပို့ရန်</h2>
+      <div class="muted">One address per line. Add an amount after a comma to override the default, e.g. <span class="mono">0xabc…, 50</span>. Up to 200 lines; each one is a separate transaction.</div>
+      <label>Asset</label>
+      <select id="adAsset"></select>
+      <label>Addresses</label>
+      <textarea id="adList" spellcheck="false" style="min-height:120px" placeholder="0x...&#10;0x..., 25"></textarea>
+      <label>Default amount per address</label>
+      <input id="adAmt" inputmode="decimal" placeholder="10">
+      <div style="margin-top:12px"><button class="primary" id="adReviewBtn">Review airdrop</button></div>
+      <div id="adReviewBox" class="hidden">
+        <div class="warn" id="adReviewText"></div>
+        <div class="row"><button id="adCancelBtn">Cancel</button><button class="primary" id="adConfirmBtn">Confirm &amp; send all</button></div>
+      </div>
+      <div class="row hidden" id="adRunBox" style="margin-top:10px;align-items:center">
+        <div id="adProgress" style="flex:4"></div>
+        <button class="danger" id="adStopBtn" style="flex:0 0 auto">Stop</button>
+      </div>
+      <div class="err" id="adErr"></div>
+      <div id="adResult" class="muted"></div>
     </div>
 
     <div class="card tab hidden" id="tab-receive">
@@ -402,7 +422,7 @@ function switchNet() {
   provider = new ethers.JsonRpcProvider(n.rpc, n.chainId, { staticNetwork: true });
   $("netInfo").textContent = `Chain ID ${n.chainId}`;
   $("rcvNet").textContent = $("ctNet").textContent = n.name;
-  cancelCreate();
+  cancelCreate(); cancelAirdrop();
   historySeq++; $("histList").innerHTML = ""; $("histErr").textContent = "";
   if (!$("tab-history").classList.contains("hidden")) loadHistory();
   const qr = qrcode(0, "M"); qr.addData(wallet.address); qr.make();
@@ -466,11 +486,14 @@ $("addTokBtn").onclick = async () => {
 // ---------- Send ----------
 function renderSendAssets() {
   const n = currentNet();
-  $("sendAsset").innerHTML = `<option value="native">${esc(n.symbol)} (native)</option>` +
+  const opts = `<option value="native">${esc(n.symbol)} (native)</option>` +
     tokensFor(n.id).map((t, i) => `<option value="${i}">${esc(t.symbol)}</option>`).join("");
+  const keep = $("adAsset").value;
+  $("sendAsset").innerHTML = $("adAsset").innerHTML = opts;
+  if ([...$("adAsset").options].some((o) => o.value === keep)) $("adAsset").value = keep;
 }
-function selectedAsset() {
-  const v = $("sendAsset").value;
+function selectedAsset(sel = "sendAsset") {
+  const v = $(sel).value;
   return v === "native" ? null : tokensFor(currentNet().id)[Number(v)];
 }
 
@@ -543,6 +566,115 @@ $("confirmSendBtn").onclick = async () => {
     refresh();
   } catch (e) { $("sendErr").textContent = errMsg(e); }
   finally { btn.disabled = false; }
+};
+
+// ---------- Airdrop ----------
+// Sends one transfer per line, waiting for each to confirm before the next, so a failure
+// stops the run cleanly and the unsent lines go back into the box for a retry.
+let pendingAirdrop = null, airdropRunning = false, airdropStop = false;
+function cancelAirdrop() { pendingAirdrop = null; $("adReviewBox").classList.add("hidden"); }
+$("adCancelBtn").onclick = cancelAirdrop;
+$("adAsset").onchange = $("adList").oninput = $("adAmt").oninput = cancelAirdrop;
+$("adStopBtn").onclick = () => { airdropStop = true; $("adStopBtn").disabled = true; };
+
+function parseAirdrop(decimals) {
+  const def = $("adAmt").value.trim();
+  const rows = [], seen = new Map();
+  const lines = $("adList").value.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith("#")) continue;
+    const [addr, amt] = line.split(/[\s,;]+/);
+    if (!ethers.isAddress(addr)) throw new Error(`Line ${i + 1}: "${addr}" is not a valid address.`);
+    const to = ethers.getAddress(addr.toLowerCase());
+    if (to === wallet.address) throw new Error(`Line ${i + 1}: that is your own address.`);
+    if (seen.has(to)) throw new Error(`Line ${i + 1}: duplicate of line ${seen.get(to)}.`);
+    seen.set(to, i + 1);
+    const text = amt || def;
+    if (!text) throw new Error(`Line ${i + 1}: no amount — fill in the default amount.`);
+    let value;
+    try { value = ethers.parseUnits(text, decimals); } catch { throw new Error(`Line ${i + 1}: invalid amount "${text}".`); }
+    if (value <= 0n) throw new Error(`Line ${i + 1}: amount must be greater than 0.`);
+    rows.push({ to, value, line });
+  }
+  if (!rows.length) throw new Error("Paste at least one address.");
+  if (rows.length > 200) throw new Error(`${rows.length} lines — the limit is 200 per run.`);
+  return rows;
+}
+
+$("adReviewBtn").onclick = async () => {
+  $("adErr").textContent = ""; $("adResult").textContent = ""; cancelAirdrop();
+  if (airdropRunning) return;
+  const n = currentNet(), t = selectedAsset("adAsset");
+  const dec = t ? t.decimals : 18, sym = t ? t.symbol : n.symbol;
+  let rows;
+  try { rows = parseAirdrop(dec); } catch (e) { return ($("adErr").textContent = e.message); }
+  const total = rows.reduce((s, r) => s + r.value, 0n);
+  const btn = $("adReviewBtn"); btn.disabled = true;
+  try {
+    const signer = wallet.connect(provider);
+    const req = (r) => t
+      ? new ethers.Contract(t.address, ERC20_ABI, signer).transfer.populateTransaction(r.to, r.value)
+      : { to: r.to, value: r.value };
+    const [bnb, have] = await Promise.all([provider.getBalance(wallet.address),
+      t ? new ethers.Contract(t.address, ERC20_ABI, provider).balanceOf(wallet.address) : null]);
+    // Check first: estimating gas for a transfer the balance cannot cover just reverts.
+    if ((t ? have : bnb) < total)
+      return ($("adErr").textContent = `Not enough ${sym}: the airdrop needs ${fmt(total, dec)}, you have ${fmt(t ? have : bnb, dec)}.`);
+    const [gas, fee] = await Promise.all([signer.estimateGas(await req(rows[0])), provider.getFeeData()]);
+    const gasLimit = gas * 13n / 10n;
+    const feeAll = gasLimit * (fee.maxFeePerGas ?? fee.gasPrice ?? 0n) * BigInt(rows.length);
+    const problems = [];
+    if (bnb < feeAll + (t ? 0n : total)) problems.push(`Not enough ${esc(n.symbol)} for ${t ? "gas" : "amount + gas"}: you have ${fmt(bnb, 18)}.`);
+    pendingAirdrop = { rows, t, chainId: n.chainId, gasLimit, req };
+    $("adReviewText").innerHTML =
+      `Send <b>${fmt(total, dec)} ${esc(sym)}</b> to <b>${rows.length}</b> address${rows.length > 1 ? "es" : ""} on <b>${esc(n.name)}</b><br>` +
+      rows.slice(0, 5).map((r) => `<span class="mono">${r.to.slice(0, 8)}…${r.to.slice(-6)}</span> · ${fmt(r.value, dec)}`).join("<br>") +
+      (rows.length > 5 ? `<br>…and ${rows.length - 5} more` : "") +
+      `<br>Max network fee ≈ ${fmt(feeAll, 18)} ${esc(n.symbol)} (${rows.length} transactions)<br>` +
+      (problems.length ? `<b>${problems.join("<br>")}</b><br>` : "") +
+      `ပို့ပြီးရင် ပြန်ယူလို့ မရပါ — address များကို သေချာစစ်ပါ။`;
+    $("adConfirmBtn").disabled = problems.length > 0;
+    $("adReviewBox").classList.remove("hidden");
+  } catch (e) { $("adErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+$("adConfirmBtn").onclick = async () => {
+  const a = pendingAirdrop;
+  if (!a || airdropRunning) return;
+  const n = currentNet();
+  if (a.chainId !== n.chainId) return cancelAirdrop();
+  cancelAirdrop();
+  airdropRunning = true; airdropStop = false;
+  $("adStopBtn").disabled = false; $("adRunBox").classList.remove("hidden");
+  $("adReviewBtn").disabled = $("adList").disabled = true;
+  const signer = wallet.connect(provider);
+  let done = 0, error = null;
+  try {
+    for (const r of a.rows) {
+      if (airdropStop) break;
+      if (currentNet().chainId !== a.chainId) { error = "Network changed — stopped."; break; }
+      $("adProgress").textContent = `Sending ${done + 1} / ${a.rows.length} → ${r.to.slice(0, 8)}…`;
+      const tx = await signer.sendTransaction({ ...(await a.req(r)), gasLimit: a.gasLimit });
+      const rc = await tx.wait();
+      if (rc.status !== 1) { error = `Transaction to ${r.to} failed (${tx.hash}).`; break; }
+      done++;
+    }
+  } catch (e) { error = errMsg(e); }
+  finally {
+    airdropRunning = false;
+    $("adRunBox").classList.add("hidden");
+    $("adReviewBtn").disabled = $("adList").disabled = false;
+    const left = a.rows.slice(done);
+    // Put back only what was not sent, so pressing Review again retries the rest.
+    $("adList").value = left.map((r) => r.line).join("\n");
+    $("adResult").innerHTML = `<span class="ok">✔ Sent ${done} / ${a.rows.length}</span>` +
+      (left.length ? ` — ${left.length} not sent are left in the box.` : "");
+    if (error) $("adErr").textContent = error;
+    else if (airdropStop && left.length) $("adErr").textContent = "Stopped.";
+    refresh();
+  }
 };
 
 // ---------- Create token ----------
