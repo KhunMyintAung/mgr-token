@@ -40,7 +40,8 @@ Form တွေမှာ ဒီအတိုင်း copy-paste လုပ်ပ�
 
 1. https://bscscan.com/login → Login (အကောင့်မရှိရင် Register)။
 2. **Address ownership verify:** https://bscscan.com/verifyAddress
-   - Address: Contract creator `0x2569b4dF18c44a67CD98d1a307aA1efE45d0621D`
+   - Contract Address: `0xc117986212033937fa52F0609843754C8f7DBacD`
+     (sign လုပ်ရမှာက Contract creator `0x2569b4dF18c44a67CD98d1a307aA1efE45d0621D`)
    - **Sign Message Manually** ကိုရွေး → ပြတဲ့ message ကို copy →
      https://token.maharpos.shop/wallet/ → **Settings → Sign message** → paste → **Sign** →
      Signature ကို BscScan မှာ ပြန် paste → **Verify Ownership**
