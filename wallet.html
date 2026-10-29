@@ -229,8 +229,10 @@
         <h2 style="margin:0">History · ငွေဝင်/ထွက် မှတ်တမ်း</h2>
         <button id="histBtn" style="flex:0 0 auto">↻ Load</button>
       </div>
-      <div class="muted" id="histNote">Uses the Etherscan API. Add your API key in Settings first.</div>
+      <div class="muted" id="histNote"></div>
       <div id="histList"></div>
+      <div style="margin-top:10px" class="hidden" id="histMoreBox"><button id="histMoreBtn">Load older</button></div>
+      <div class="muted" id="histHint" style="margin-top:8px"></div>
       <div class="err" id="histErr"></div>
     </div>
 
@@ -255,8 +257,8 @@
     </div>
 
     <div class="card tab hidden" id="tab-settings">
-      <h2>Etherscan API key (for History)</h2>
-      <div class="muted">Get a free key at etherscan.io → API Keys. One key works for BscScan and the other supported chains. It is saved unencrypted in this browser; it can only read public data.</div>
+      <h2>Etherscan API key (optional, for History)</h2>
+      <div class="muted">Without a key, History reads token transfers straight from the blockchain. A key adds native coin (BNB/ETH) transfers on chains your Etherscan plan covers — the free plan covers Ethereum but not BNB Chain. It is saved unencrypted in this browser; it can only read public data.</div>
       <div class="row" style="margin-top:8px">
         <input id="esKey" type="password" autocomplete="off" spellcheck="false" placeholder="API key" style="flex:3">
         <button id="esSaveBtn">Save</button>
@@ -329,6 +331,8 @@ const DEFAULT_TOKENS = {
 // Logos served from this site (the CSP blocks remote images), keyed by lower-case address.
 const MGR_ADDRESS = "0xc117986212033937fa52f0609843754c8f7dbacd";
 const KNOWN_LOGOS = { [MGR_ADDRESS]: "site/logo-256.png" };
+// Block each token was created in: on-chain History never needs to scan before it.
+const KNOWN_START_BLOCKS = { [MGR_ADDRESS]: 130443869 };
 
 function tokenIcon(t) {
   const logo = KNOWN_LOGOS[t.address.toLowerCase()];
@@ -457,11 +461,15 @@ $("netSel").onchange = () => { save(LS_NET, $("netSel").value); switchNet(); };
 
 function switchNet() {
   const n = currentNet();
-  provider = new ethers.JsonRpcProvider(n.rpc, n.chainId, { staticNetwork: true });
+  // No JSON-RPC batching: public RPCs work through a batch one call at a time, which made
+  // History's parallel log reads as slow as sequential ones.
+  provider = new ethers.JsonRpcProvider(n.rpc, n.chainId, { staticNetwork: true, batchMaxCount: 1 });
   $("netInfo").textContent = `Chain ID ${n.chainId}`;
   $("rcvNet").textContent = $("ctNet").textContent = n.name;
   cancelCreate(); cancelAirdrop();
-  historySeq++; $("histList").innerHTML = ""; $("histErr").textContent = "";
+  historySeq++; historyBusy = false; $("histBtn").disabled = $("histMoreBtn").disabled = false;
+  $("histList").innerHTML = ""; $("histErr").textContent = ""; $("histNote").textContent = "";
+  $("histHint").textContent = ""; $("histMoreBox").classList.add("hidden");
   if (!$("tab-history").classList.contains("hidden")) loadHistory();
   const qr = qrcode(0, "M"); qr.addData(wallet.address); qr.make();
   $("qr").innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2 });
@@ -784,9 +792,150 @@ $("ctConfirmBtn").onclick = async () => {
   finally { btn.disabled = false; }
 };
 
-// ---------- History (Etherscan V2 API) ----------
-let historySeq = 0;
+// ---------- History ----------
+// With an Etherscan key on a chain the plan covers, History comes from the Etherscan V2 API.
+// Otherwise it reads the tracked tokens' Transfer logs from the RPC, in block windows the
+// RPC accepts, and caches what it has scanned so each visit only reads the new blocks.
+let historySeq = 0, historyBusy = false;
 const esKey = () => { try { return localStorage.getItem(LS_ESKEY) || ""; } catch { return ""; } };
+const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
+const HIST_FIRST_WINDOWS = 4, HIST_MORE_WINDOWS = 6;
+let logWindow = 50000;   // shrinks for RPCs that allow less per eth_getLogs call
+
+function renderHistory(items, n) {
+  const me = wallet.address.toLowerCase();
+  const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
+  $("histList").innerHTML = items.map((t) => {
+    const out = t.from.toLowerCase() === me, inn = t.to?.toLowerCase() === me;
+    const [label, who, sign, cls] =
+      t.created ? ["Created contract", short(t.created), "", ""]
+      : out && inn ? ["To self", "", "", ""]
+      : inn && BigInt(t.from) === 0n ? ["Minted", "new tokens", "+", "in"]
+      : inn ? ["Received", "from " + short(t.from), "+", "in"]
+      : ["Sent", "to " + short(t.to), "−", ""];
+    const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${esc(t.hash)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+    const amt = t.value > 0n || !t.created ? `${sign}${fmt(t.value, t.decimals)} ${esc(t.symbol)}` : "";
+    const when = t.ts ? new Date(t.ts * 1000).toLocaleString() : `block ${t.block}`;
+    return `<div class="hx"><div><div>${link}${t.failed ? ' <span class="fail">(failed)</span>' : ""}</div>
+      <div class="muted mono">${esc(who)}</div><div class="muted">${esc(when)}</div></div>
+      <div class="amt ${t.failed ? "fail" : cls}">${amt}</div></div>`;
+  }).join("");
+}
+
+// eth_getLogs over [fromBlock, toBlock]; if the RPC rejects the range, retries on the newest
+// half (and remembers the smaller window). Returns the logs and the lowest block covered.
+async function getLogsAdaptive(filter, attempt = 0) {
+  try { return { fromBlock: filter.fromBlock, logs: await provider.getLogs(filter) }; }
+  catch (e) {
+    // Free RPCs answer 403/429 when called too often: wait and retry a few times.
+    if (/\b(403|429)\b|rate|too many requests/i.test(errMsg(e)) && attempt < 4) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      return getLogsAdaptive(filter, attempt + 1);
+    }
+    const span = filter.toBlock - filter.fromBlock + 1;
+    if (!/range|limit|exceed|too (many|large)/i.test(errMsg(e) + JSON.stringify(e.error || "")) || span <= 500) throw e;
+    logWindow = Math.max(500, Math.floor(span / 2));
+    return getLogsAdaptive({ ...filter, fromBlock: filter.toBlock - logWindow + 1 }, attempt);
+  }
+}
+
+// Reads [from, to] in windows, three at a time (each window is two calls: from me / to me).
+async function scanTransfers(addresses, from, to, onProgress) {
+  const me = ethers.zeroPadValue(wallet.address, 32);
+  const found = [];
+  const queue = [];
+  for (let hi = to; hi >= from; hi -= logWindow) queue.push([Math.max(from, hi - logWindow + 1), hi]);
+  let done = 0;
+  const worker = async () => {
+    while (queue.length) {
+      const [lo, hi] = queue.shift();
+      const base = { address: addresses, fromBlock: lo, toBlock: hi };
+      const res = await Promise.all([
+        getLogsAdaptive({ ...base, topics: [TRANSFER_TOPIC, me] }),
+        getLogsAdaptive({ ...base, topics: [TRANSFER_TOPIC, null, me] }),
+      ]);
+      // If either call had to narrow its range, keep only what both covered and queue the rest.
+      const covered = Math.max(...res.map((r) => r.fromBlock));
+      for (const r of res) for (const l of r.logs) if (l.blockNumber >= covered) found.push(l);
+      if (covered > lo) queue.push([lo, covered - 1]);
+      done += hi - covered + 1;
+      onProgress(done, to - from + 1);
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return found;
+}
+
+async function chainHistory(seq, n, older) {
+  const toks = tokensFor(n.id);
+  $("histMoreBox").classList.add("hidden");
+  $("histHint").innerHTML = n.explorer
+    ? `Shows token transfers (${esc(toks.map((t) => t.symbol).join(", ") || "none")}). ${esc(n.symbol)} transfers: <a href="${esc(n.explorer)}/address/${wallet.address}" target="_blank" rel="noopener">view on explorer</a>.`
+    : "Shows transfers of the tokens in your Tokens list.";
+  if (!toks.length) return ($("histNote").textContent = "Add a token in the Tokens tab to see its history.");
+
+  const cacheKey = `mw.hist.${n.chainId}.${wallet.address.toLowerCase()}`;
+  const tokensKey = toks.map((t) => t.address.toLowerCase()).sort().join(",");
+  let cache = load(cacheKey, null);
+  if (!cache || cache.tokensKey !== tokensKey) cache = { tokensKey, newest: null, oldest: null, oldestTs: null, logs: [] };
+  const floor = toks.every((t) => KNOWN_START_BLOCKS[t.address.toLowerCase()])
+    ? Math.min(...toks.map((t) => KNOWN_START_BLOCKS[t.address.toLowerCase()])) : 0;
+  const byAddr = Object.fromEntries(toks.map((t) => [t.address.toLowerCase(), t]));
+
+  const show = () => {
+    const items = cache.logs.map((l) => {
+      const t = byAddr[l.token];
+      return { block: l.b, ts: l.ts, hash: l.tx, from: l.from, to: l.to, value: BigInt(l.value),
+        symbol: t?.symbol || "?", decimals: t?.decimals ?? 18 };
+    });
+    renderHistory(items.slice(0, 60), n);
+    const since = cache.oldestTs ? new Date(cache.oldestTs * 1000).toLocaleString() : `block ${cache.oldest}`;
+    $("histNote").textContent = cache.oldest == null ? "" :
+      (items.length ? `${items.length} transfer${items.length > 1 ? "s" : ""}` : "No transfers") +
+      (cache.oldest <= floor ? ` — complete history on ${n.name}` : ` since ${since} on ${n.name}`);
+    $("histMoreBox").classList.toggle("hidden", cache.oldest == null || cache.oldest <= floor);
+  };
+  show();
+
+  // A few blocks of margin: load-balanced RPCs may answer from a node slightly behind.
+  const head = (await provider.getBlockNumber()) - 3;
+  const ranges = [];
+  if (cache.newest == null) ranges.push([Math.max(floor, head - HIST_FIRST_WINDOWS * logWindow + 1), head]);
+  else {
+    if (head > cache.newest) ranges.push([cache.newest + 1, head]);
+    if (older && cache.oldest > floor) ranges.push([Math.max(floor, cache.oldest - HIST_MORE_WINDOWS * logWindow), cache.oldest - 1]);
+  }
+  const addresses = toks.map((t) => t.address);
+  for (const [from, to] of ranges) {
+    const logs = await scanTransfers(addresses, from, to, (done, total) => {
+      if (seq === historySeq) $("histNote").textContent = `Reading ${n.name} blocks… ${Math.round(done / total * 100)}%`;
+    });
+    if (seq !== historySeq) return;
+    const seen = new Set(cache.logs.map((l) => l.tx + ":" + l.i));
+    for (const l of logs) {
+      // A transfer to yourself matches both the "from me" and "to me" queries.
+      if (seen.has(l.transactionHash + ":" + l.index)) continue;
+      seen.add(l.transactionHash + ":" + l.index);
+      cache.logs.push({ b: l.blockNumber, i: l.index, tx: l.transactionHash, token: l.address.toLowerCase(),
+        from: ethers.getAddress("0x" + l.topics[1].slice(26)), to: ethers.getAddress("0x" + l.topics[2].slice(26)),
+        value: BigInt(l.data).toString(), ts: null });
+    }
+    cache.newest = Math.max(cache.newest ?? to, to);
+    if (cache.oldest == null || from < cache.oldest) { cache.oldest = from; cache.oldestTs = null; }
+  }
+  cache.logs.sort((x, y) => y.b - x.b || y.i - x.i);
+
+  // Timestamps cost one call per block, so only fetch them for the rows on screen.
+  const blocks = [...new Set([...cache.logs.slice(0, 60).filter((l) => !l.ts).map((l) => l.b),
+    ...(cache.oldestTs ? [] : [cache.oldest])])];
+  const times = Object.fromEntries(await Promise.all(blocks.map((b) =>
+    provider.getBlock(b).then((blk) => [b, blk?.timestamp ?? null], () => [b, null]))));
+  if (seq !== historySeq) return;
+  for (const l of cache.logs) if (!l.ts && times[l.b]) l.ts = times[l.b];
+  if (!cache.oldestTs) cache.oldestTs = times[cache.oldest] ?? null;
+  save(cacheKey, cache);
+  show();
+}
 
 async function esList(chainId, action, key) {
   const qs = new URLSearchParams({ chainid: chainId, module: "account", action, address: wallet.address,
@@ -797,17 +946,27 @@ async function esList(chainId, action, key) {
   throw new Error(typeof r.result === "string" ? r.result : r.message);
 }
 
-async function loadHistory() {
+async function loadHistory(older = false) {
+  if (historyBusy && older === true) return;
   const seq = ++historySeq;
   const n = currentNet();
   const key = esKey();
-  $("histErr").textContent = ""; $("histList").innerHTML = "";
-  if (!key) return ($("histNote").textContent = "Add your Etherscan API key in Settings to see history.");
-  $("histNote").textContent = `Loading latest transactions on ${n.name}…`;
+  historyBusy = true; $("histBtn").disabled = $("histMoreBtn").disabled = true;
+  $("histErr").textContent = "";
+  if (older !== true) { $("histList").innerHTML = ""; $("histHint").textContent = ""; $("histMoreBox").classList.add("hidden"); }
   try {
-    const [txs, toks] = await Promise.all([esList(n.chainId, "txlist", key), esList(n.chainId, "tokentx", key)]);
+    let txs = null, toks;
+    if (key) {
+      $("histNote").textContent = `Loading latest transactions on ${n.name}…`;
+      try { [txs, toks] = await Promise.all([esList(n.chainId, "txlist", key), esList(n.chainId, "tokentx", key)]); }
+      catch (e) {
+        // The free Etherscan plan does not cover every chain; read the chain directly instead.
+        if (!/not supported|upgrade|plan/i.test(errMsg(e))) throw e;
+        txs = null;
+      }
+    }
     if (seq !== historySeq) return;
-    const me = wallet.address.toLowerCase();
+    if (!txs) return await chainHistory(seq, n, older === true);
     const tokenHashes = new Set(toks.map((t) => t.hash));
     const items = [
       ...txs.filter((t) => t.contractAddress || !(BigInt(t.value) === 0n && tokenHashes.has(t.hash))).map((t) => ({
@@ -818,29 +977,18 @@ async function loadHistory() {
         decimals: Number(t.tokenDecimal) || 0, failed: false, created: null })),
     ].sort((a, b) => b.ts - a.ts).slice(0, 40);
 
-    $("histNote").textContent = items.length ? `Latest ${items.length} on ${n.name}` : `No transactions on ${n.name} yet.`;
-    const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
-    $("histList").innerHTML = items.map((t) => {
-      const out = t.from.toLowerCase() === me, inn = t.to?.toLowerCase() === me;
-      const [label, who, sign, cls] =
-        t.created ? ["Created contract", short(t.created), "", ""]
-        : out && inn ? ["To self", "", "", ""]
-        : inn && BigInt(t.from) === 0n ? ["Minted", "new tokens", "+", "in"]
-        : inn ? ["Received", "from " + short(t.from), "+", "in"]
-        : ["Sent", "to " + short(t.to), "−", ""];
-      const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${esc(t.hash)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
-      const amt = t.value > 0n || !t.created ? `${sign}${fmt(t.value, t.decimals)} ${esc(t.symbol)}` : "";
-      return `<div class="hx"><div><div>${link}${t.failed ? ' <span class="fail">(failed)</span>' : ""}</div>
-        <div class="muted mono">${esc(who)}</div><div class="muted">${new Date(t.ts * 1000).toLocaleString()}</div></div>
-        <div class="amt ${t.failed ? "fail" : cls}">${amt}</div></div>`;
-    }).join("");
+    $("histNote").textContent = items.length ? `Latest ${items.length} on ${n.name} (Etherscan)` : `No transactions on ${n.name} yet.`;
+    renderHistory(items, n);
   } catch (e) {
     if (seq !== historySeq) return;
     $("histNote").textContent = "";
     $("histErr").textContent = `Could not load history on ${n.name}: ${errMsg(e)}`;
+  } finally {
+    if (seq === historySeq) { historyBusy = false; $("histBtn").disabled = $("histMoreBtn").disabled = false; }
   }
 }
-$("histBtn").onclick = loadHistory;
+$("histBtn").onclick = () => loadHistory();
+$("histMoreBtn").onclick = () => loadHistory(true);
 
 $("signBtn").onclick = async () => {
   $("signErr").textContent = ""; $("signOut").textContent = "";
