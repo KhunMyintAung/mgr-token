@@ -39,6 +39,14 @@ for (const [src, [from, to]] of Object.entries(libs)) {
   html = html.replace(`src="${src}"`, `src="${to}"`);
   fs.copyFileSync(p(from), path.join(dist, "wallet", to));
 }
+// Icons and the manifest live in site/ while developing; the live wallet gets its own copies.
+const assets = new Set(html.match(/site\/[\w.-]+/g) || []);
+for (const a of [...assets]) {
+  if (a.endsWith(".webmanifest"))
+    for (const icon of JSON.parse(fs.readFileSync(p(a), "utf8")).icons) assets.add("site/" + icon.src);
+}
+for (const a of assets) fs.copyFileSync(p(a), path.join(dist, "wallet", a.slice("site/".length)));
+html = html.replace(/site\/([\w.-]+)/g, "$1");
 fs.writeFileSync(path.join(dist, "wallet", "index.html"), html);
 
 const files = [];

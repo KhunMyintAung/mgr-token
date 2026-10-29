@@ -3,21 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My EVM Wallet</title>
+<title>MGR Wallet</title>
+<link rel="icon" href="site/logo-32.png">
+<link rel="apple-touch-icon" href="site/logo-192.png">
+<link rel="manifest" href="site/wallet.webmanifest">
+<meta name="theme-color" content="#0f7a4a">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="build/MyToken.js"></script>
 <style>
   :root {
     --bg: #f4f5f7; --card: #ffffff; --text: #16181d; --muted: #6b7280;
-    --border: #e3e5ea; --accent: #2f6fed; --accent-text: #ffffff;
+    --border: #e3e5ea; --accent: #0f7a4a; --accent-text: #ffffff; --gold: #b07c0c;
     --danger: #d93025; --ok: #188038; --warn-bg: #fff6e0; --warn-text: #7a5300;
+    --hero-from: #0f7a4a; --hero-to: #064d2e; --hero-text: #ffffff;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f1115; --card: #181b21; --text: #e8eaed; --muted: #9aa0a6;
-      --border: #2a2e36; --accent: #5b8cff; --accent-text: #0f1115;
+      --bg: #0d1411; --card: #141d18; --text: #e9efe9; --muted: #9aa8a0;
+      --border: #24302a; --accent: #2fb57a; --accent-text: #0d1411; --gold: #f0c050;
       --danger: #f28b82; --ok: #81c995; --warn-bg: #3a2f12; --warn-text: #f5d38a;
+      --hero-from: #10593a; --hero-to: #0a3524; --hero-text: #ffffff;
     }
   }
   * { box-sizing: border-box; }
@@ -26,6 +32,22 @@
   main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
   a { color: var(--accent); }
   h1 { font-size: 20px; margin: 0 0 16px; display: flex; justify-content: space-between; align-items: center; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand img { width: 36px; height: 36px; }
+  .brand small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .hero-logo { display: block; width: 84px; height: 84px; margin: 4px auto 14px; }
+  .card.balance-card { background: linear-gradient(135deg, var(--hero-from), var(--hero-to)); color: var(--hero-text); border: 0; }
+  .balance-card label, .balance-card .muted { color: rgba(255,255,255,.75); }
+  .balance-card select { background: rgba(0,0,0,.2); color: #fff; border-color: rgba(255,255,255,.25); }
+  .balance-card select option { color: #000; }
+  .balance-card button { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.25); }
+  .ticon { width: 34px; height: 34px; border-radius: 50%; flex: 0 0 34px; display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; color: #fff; overflow: hidden; }
+  .ticon img { width: 100%; height: 100%; }
+  .tok .left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .tok .amt { font-weight: 600; white-space: nowrap; }
+  .tok .x { border: 0; background: none; color: var(--muted); padding: 2px 0; font-size: 12px; }
+  .tok.featured .name { color: var(--gold); }
   h2 { font-size: 16px; margin: 0 0 12px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
   label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
@@ -49,7 +71,6 @@
   .tok { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); gap: 8px; }
   .tok:first-child { border-top: 0; }
   .tok .name { font-weight: 600; }
-  .tok .x { padding: 2px 8px; font-size: 12px; }
   .tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
   @media (max-width: 480px) { .tabs { grid-template-columns: repeat(3, 1fr); } }
   .hx { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
@@ -66,10 +87,11 @@
 </head>
 <body>
 <main>
-  <h1><span>🔐 My EVM Wallet</span><button id="lockBtn" class="hidden">Lock</button></h1>
+  <h1><span class="brand"><img src="site/logo-256.png" alt=""><span>MGR Wallet<small>MaharGroup</small></span></span><button id="lockBtn" class="hidden">Lock</button></h1>
 
   <!-- Setup: no wallet saved yet -->
   <section id="setupView" class="hidden">
+    <img class="hero-logo" src="site/logo-256.png" alt="MGR">
     <div class="card">
       <h2>Create new wallet · Wallet အသစ်ဖန်တီးမည်</h2>
       <label>Password (min 8 chars)</label>
@@ -104,6 +126,7 @@
 
   <!-- Unlock -->
   <section id="unlockView" class="hidden">
+    <img class="hero-logo" src="site/logo-256.png" alt="MGR">
     <div class="card">
       <h2>Unlock wallet · Password ထည့်ပါ</h2>
       <div class="muted mono" id="savedAddr"></div>
@@ -119,7 +142,7 @@
 
   <!-- Main wallet -->
   <section id="walletView" class="hidden">
-    <div class="card">
+    <div class="card balance-card">
       <label style="margin-top:0">Network</label>
       <select id="netSel"></select>
       <div class="muted" style="margin-top:12px">Address</div>
@@ -297,9 +320,24 @@ const DEFAULT_TOKENS = {
     { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", symbol: "USDT", decimals: 6 },
     { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", symbol: "USDC", decimals: 6 },
   ],
-  bsc: [{ address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18 }],
+  bsc: [
+    { address: "0xc117986212033937fa52F0609843754C8f7DBacD", symbol: "MGR", decimals: 18 },
+    { address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18 },
+  ],
   polygon: [{ address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", symbol: "USDT", decimals: 6 }],
 };
+// Logos served from this site (the CSP blocks remote images), keyed by lower-case address.
+const MGR_ADDRESS = "0xc117986212033937fa52f0609843754c8f7dbacd";
+const KNOWN_LOGOS = { [MGR_ADDRESS]: "site/logo-256.png" };
+
+function tokenIcon(t) {
+  const logo = KNOWN_LOGOS[t.address.toLowerCase()];
+  if (logo) return `<span class="ticon"><img src="${logo}" alt=""></span>`;
+  // No logo: a coloured circle with the first letter, its hue taken from the address.
+  const hue = parseInt(t.address.slice(2, 8), 16) % 360;
+  return `<span class="ticon" style="background:hsl(${hue} 45% 42%)">${esc(t.symbol.slice(0, 1).toUpperCase())}</span>`;
+}
+
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function decimals() view returns (uint8)",
@@ -323,7 +361,7 @@ const errMsg = (e) => e?.shortMessage || e?.reason || e?.message || String(e);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function nets() { return [...DEFAULT_NETS, ...load(LS_NETS, [])]; }
-function currentNet() { const id = load(LS_NET, "eth"); return nets().find((n) => n.id === id) || DEFAULT_NETS[0]; }
+function currentNet() { const id = load(LS_NET, "bsc"); return nets().find((n) => n.id === id) || DEFAULT_NETS[0]; }
 function tokensFor(netId) {
   const all = load(LS_TOKENS, null) ?? DEFAULT_TOKENS;
   return all[netId] || [];
@@ -437,8 +475,11 @@ async function refresh() {
   const toks = tokensFor(n.id);
   $("nativeBal").textContent = "…";
   $("tokList").innerHTML = toks.length ? toks.map((t, i) => `
-    <div class="tok"><div><div class="name">${esc(t.symbol)}</div><div class="muted mono">${esc(t.address)}</div></div>
-    <div style="text-align:right"><div id="tb-${i}">…</div><button class="x" data-rm="${i}">Remove</button></div></div>`).join("")
+    <div class="tok${t.address.toLowerCase() === MGR_ADDRESS ? " featured" : ""}">
+      <div class="left">${tokenIcon(t)}<div style="min-width:0"><div class="name">${esc(t.symbol)}</div>
+        <div class="muted mono" title="${esc(t.address)}">${esc(t.address.slice(0, 8))}…${esc(t.address.slice(-6))}</div></div></div>
+      <div style="text-align:right"><div class="amt"><span id="tb-${i}">…</span> ${esc(t.symbol)}</div><button class="x" data-rm="${i}">Remove</button></div>
+    </div>`).join("")
     : `<div class="muted">No tokens yet. Add one by contract address below.</div>`;
   renderSendAssets();
 
