@@ -1,0 +1,4 @@
+# Keep LF everywhere: deploy.sh runs under bash, and MyToken.sol must stay byte-identical
+# to the source verified on BscScan/Sourcify.
+* text=auto eol=lf
+*.png binary
