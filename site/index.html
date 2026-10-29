@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MaharGroup (MGR)</title>
+<meta name="description" content="MaharGroup (MGR) — a fixed-supply BEP-20 token on BNB Smart Chain.">
+<link rel="icon" href="logo-32.png">
+<meta property="og:title" content="MaharGroup (MGR)">
+<meta property="og:description" content="Fixed-supply BEP-20 token on BNB Smart Chain.">
+<meta property="og:image" content="logo-512.png">
+<style>
+  :root {
+    --bg: #f6f5f0; --card: #ffffff; --text: #17201b; --muted: #5f6b64; --border: #e2e4dc;
+    --green: #0f7a4a; --gold: #c98e12; --btn-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1411; --card: #141d18; --text: #e9efe9; --muted: #9aa8a0; --border: #24302a;
+      --green: #2fb57a; --gold: #f0c050; --btn-text: #0d1411;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "Myanmar Text", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  header { text-align: center; margin-bottom: 36px; }
+  header img { width: 120px; height: 120px; }
+  h1 { font-size: 34px; margin: 12px 0 4px; }
+  h1 span { color: var(--gold); }
+  .tag { color: var(--muted); margin: 0; }
+  .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 22px; }
+  .btn { padding: 11px 18px; border-radius: 10px; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .btn.primary { background: var(--green); border-color: var(--green); color: var(--btn-text); }
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; color: var(--green); }
+  h2 + h3 { margin-top: 0; }
+  ul { padding-left: 20px; margin: 0; }
+  li { margin-bottom: 8px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 14px; }
+  .copy { margin-left: 6px; padding: 2px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer; }
+  .ok { color: var(--green); }
+  .muted { color: var(--muted); }
+  ol { padding-left: 20px; margin: 0; }
+  a { color: var(--green); }
+  #msg { text-align: center; min-height: 1.5em; color: var(--muted); font-size: 14px; margin-top: 10px; }
+  footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 28px; }
+  @media (max-width: 480px) { dl { grid-template-columns: 1fr; gap: 2px; } dd { margin-bottom: 8px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="logo-256.png" alt="MGR logo">
+    <h1>MaharGroup <span>(MGR)</span></h1>
+    <p class="tag">BEP-20 token on BNB Smart Chain · BNB Smart Chain ပေါ်က Token</p>
+    <div class="actions">
+      <a class="btn primary" id="buyLink" target="_blank" rel="noopener">🥞 Buy on PancakeSwap</a>
+      <button class="btn" id="addBtn">🦊 Add MGR to wallet</button>
+      <a class="btn" id="scanLink" target="_blank" rel="noopener">View on BscScan</a>
+    </div>
+    <div id="msg"></div>
+  </header>
+
+  <section>
+    <h2>Token details · Token အချက်အလက်</h2>
+    <dl>
+      <dt>Name</dt><dd>MaharGroup</dd>
+      <dt>Symbol</dt><dd>MGR</dd>
+      <dt>Network</dt><dd>BNB Smart Chain (BEP-20, chain ID 56)</dd>
+      <dt>Contract</dt><dd><span class="mono" id="addr"></span><button class="copy" id="copyBtn">Copy</button></dd>
+      <dt>Decimals</dt><dd>18</dd>
+      <dt>Total supply</dt><dd id="supply">1,000,000 MGR</dd>
+      <dt>Source code</dt><dd><span class="ok">✔ Verified</span> on BscScan</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Market · ဈေးကွက်</h2>
+    <dl>
+      <dt>Price</dt><dd id="price">…</dd>
+      <dt>Pool liquidity</dt><dd id="liq">…</dd>
+      <dt>Pool (PancakeSwap V2)</dt><dd><span class="mono" id="pairAddr"></span></dd>
+      <dt>Charts</dt><dd><a id="dexsLink" target="_blank" rel="noopener">DexScreener</a> · <a id="geckoLink" target="_blank" rel="noopener">GeckoTerminal</a></dd>
+    </dl>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">The pool is small, so even small trades move the price a lot. Always check the contract address before buying.<br>
+      Pool သေးသောကြောင့် အနည်းငယ် ဝယ်/ရောင်းရုံဖြင့် ဈေးအများကြီး ပြောင်းနိုင်ပါသည်။ မဝယ်ခင် Contract address ကို စစ်ပါ။</p>
+  </section>
+
+  <section>
+    <h2>About · အကြောင်း</h2>
+    <h3>Who we are · ကျွန်ုပ်တို့အကြောင်း</h3>
+    <p>MaharGroup is the group behind <b>Mahar Shwe Mobile</b>, a phone shop and software team from Hsisheng Township, Taunggyi, Shan State, Myanmar.
+      We build <a href="https://maharpos.shop" target="_blank" rel="noopener">Mahar POS</a> — a free point-of-sale and shop-records app used by mini marts and phone shops for sales, stock, IMEI tracking, repairs, top-ups, debts and daily reports.</p>
+    <p>MaharGroup သည် ရှမ်းပြည်နယ်၊ တောင်ကြီးခရိုင်၊ ဆီဆိုင်မြို့နယ်မှ <b>Mahar Shwe Mobile</b> ဖုန်းဆိုင်နှင့် Software အဖွဲ့ ဖြစ်ပါသည်။
+      Mini Mart နှင့် ဖုန်းဆိုင်များ အခမဲ့ အသုံးပြုနိုင်သော <a href="https://maharpos.shop" target="_blank" rel="noopener">Mahar POS</a> (အရောင်း၊ Stock၊ IMEI၊ Repair၊ ဖုန်းဖြည့်၊ အကြွေးစာရင်းနှင့် နေ့စဉ် Report) ကို ရေးသားထုတ်လုပ်ပါသည်။</p>
+
+    <h3>What MGR is · MGR ဆိုတာ</h3>
+    <p>MGR is MaharGroup's community token on BNB Smart Chain. It is our first step into blockchain: a simple, transparent token that our community can hold and send to each other.</p>
+    <p>MGR သည် MaharGroup ၏ Community Token ဖြစ်ပြီး BNB Smart Chain ပေါ်တွင် ရှိပါသည်။ ကျွန်ုပ်တို့ Community ဝင်များ ကိုင်ဆောင်ပြီး အချင်းချင်း ပို့နိုင်သော ရိုးရှင်းပြီး ပွင့်လင်းမြင်သာသည့် Token ဖြစ်ပါသည်။</p>
+
+    <h3>Why you can check it yourself · ကိုယ်တိုင် စစ်ဆေးနိုင်ပုံ</h3>
+    <ul>
+      <li><b>Fixed supply</b> — exactly 1,000,000 MGR were created once. The contract has no mint function, so nobody, including us, can ever create more.<br>
+        စုစုပေါင်း 1,000,000 MGR ကို တစ်ကြိမ်တည်း ထုတ်ခဲ့ပြီး ကျွန်ုပ်တို့ကိုယ်တိုင်ပင် ထပ်ထုတ်၍ မရပါ။</li>
+      <li><b>No owner powers</b> — no admin, no pause, no blacklist, no transfer tax. Nobody can freeze your MGR.<br>
+        Admin၊ ပိတ်ဆို့ခြင်း၊ Blacklist နှင့် လွှဲခ (tax) မရှိပါ။ မည်သူမျှ သင့် MGR ကို ပိတ်ထား၍ မရပါ။</li>
+      <li><b>Burnable</b> — holders can permanently burn their own MGR, which lowers the total supply.<br>
+        ကိုင်ဆောင်သူများ ကိုယ်ပိုင် MGR ကို Burn (အပြီးဖျက်) လုပ်နိုင်ပြီး Supply လျော့သွားပါသည်။</li>
+      <li><b>Open source</b> — the code is verified on <a id="scanCode" target="_blank" rel="noopener">BscScan</a> and <a id="sourcifyLink" target="_blank" rel="noopener">Sourcify</a> (exact match).<br>
+        Source code ကို BscScan နှင့် Sourcify တွင် Verify လုပ်ထားပြီး မည်သူမဆို ဖတ်ရှုနိုင်ပါသည်။</li>
+    </ul>
+
+    <h3>Please note · သတိပြုရန်</h3>
+    <p style="margin-bottom:0">MGR is not an investment product and comes with no promise of price, profit or redemption. Crypto prices can go to zero. Only use what you can afford to lose, and beware of anyone selling "MGR" with a different contract address.<br>
+      MGR သည် ရင်းနှီးမြှုပ်နှံမှု ပစ္စည်း မဟုတ်ပါ။ ဈေးနှုန်း၊ အမြတ် သို့မဟုတ် ပြန်လည်ဝယ်ယူပေးမည်ဟု ကတိမပေးပါ။ Crypto ဈေးနှုန်းသည် သုည အထိ ကျနိုင်ပါသည်။ Contract address မတူသော "MGR" အတုများကို သတိထားပါ။</p>
+  </section>
+
+  <section>
+    <h2>Links · ဆက်သွယ်ရန်</h2>
+    <dl>
+      <dt>Mahar POS</dt><dd><a href="https://maharpos.shop" target="_blank" rel="noopener">maharpos.shop</a></dd>
+      <dt>Facebook</dt><dd><a href="https://www.facebook.com/Mychoicemylife2018" target="_blank" rel="noopener">My Choice My Life</a></dd>
+      <dt>Telegram</dt><dd><a href="https://t.me/+2gc9ml7iMgk1ZThl" target="_blank" rel="noopener">Community group</a> · <a href="https://t.me/Mylifemychoice68" target="_blank" rel="noopener">@Mylifemychoice68</a></dd>
+      <dt>TikTok</dt><dd><a href="https://www.tiktok.com/@maharshwemobile" target="_blank" rel="noopener">@maharshwemobile</a></dd>
+      <dt>Wallet</dt><dd><a href="wallet/">Mahar web wallet</a></dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>How to add MGR to your wallet · Wallet ထဲ ထည့်နည်း</h2>
+    <ol>
+      <li>Open MetaMask, Trust Wallet or another wallet and switch to <b>BNB Smart Chain</b>.</li>
+      <li>Choose <b>Import token</b> / <b>Add custom token</b>.</li>
+      <li>Paste the contract address above. Symbol <b>MGR</b> and decimals <b>18</b> fill in automatically.</li>
+    </ol>
+  </section>
+
+  <footer>Only trust the contract address shown on this page. · ဒီစာမျက်နှာက Contract address ကိုသာ ယုံကြည်ပါ။</footer>
+</main>
+
+<script>
+const TOKEN = "0xc117986212033937fa52F0609843754C8f7DBacD";
+const RPC = "https://bsc-rpc.publicnode.com";
+const $ = (id) => document.getElementById(id);
+
+// PancakeSwap V2 MGR/WBNB pair. WBNB's address sorts below MGR's, so it is token0.
+const PAIR = "0x617eE0F316C1d4aB6378EC3127dF2775Eba4B4c7";
+
+$("addr").textContent = TOKEN;
+$("pairAddr").textContent = PAIR;
+$("buyLink").href = `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${TOKEN}`;
+$("dexsLink").href = `https://dexscreener.com/bsc/${PAIR}`;
+$("geckoLink").href = `https://www.geckoterminal.com/bsc/pools/${PAIR.toLowerCase()}`;
+$("scanLink").href = `https://bscscan.com/token/${TOKEN}`;
+$("scanCode").href = `https://bscscan.com/address/${TOKEN}#code`;
+$("sourcifyLink").href = `https://repo.sourcify.dev/56/${TOKEN}`;
+
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(TOKEN); $("copyBtn").textContent = "Copied"; }
+  catch { $("copyBtn").textContent = "Copy failed"; }
+  setTimeout(() => ($("copyBtn").textContent = "Copy"), 1200);
+};
+
+const call = (to, data) => fetch(RPC, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
+}).then((r) => r.json()).then((r) => r.result);
+
+// Live total supply (in case holders have burned some).
+call(TOKEN, "0x18160ddd").then((v) => {
+  $("supply").textContent = (BigInt(v) / 10n ** 18n).toLocaleString("en-US") + " MGR";
+}).catch(() => {});
+
+// Live price from the pool reserves (getReserves: reserve0 = WBNB, reserve1 = MGR).
+call(PAIR, "0x0902f1ac").then((v) => {
+  const bnb = Number(BigInt("0x" + v.slice(2, 66))) / 1e18;
+  const mgr = Number(BigInt("0x" + v.slice(66, 130))) / 1e18;
+  $("price").textContent = mgr ? `1 MGR ≈ ${(bnb / mgr).toPrecision(4)} BNB` : "—";
+  $("liq").textContent = `${bnb.toPrecision(4)} BNB + ${Math.round(mgr).toLocaleString("en-US")} MGR`;
+}).catch(() => { $("price").textContent = $("liq").textContent = "—"; });
+
+$("addBtn").onclick = async () => {
+  const eth = window.ethereum;
+  if (!eth) { $("msg").textContent = "No browser wallet found. Copy the contract address and add it in your wallet app."; return; }
+  try {
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x38" }] });
+    } catch (e) {
+      if (e.code !== 4902) throw e;
+      await eth.request({ method: "wallet_addEthereumChain", params: [{
+        chainId: "0x38", chainName: "BNB Smart Chain", nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+        rpcUrls: [RPC], blockExplorerUrls: ["https://bscscan.com"] }] });
+    }
+    const added = await eth.request({ method: "wallet_watchAsset", params: {
+      type: "ERC20", options: { address: TOKEN, symbol: "MGR", decimals: 18, image: new URL("logo-256.png", location.href).href } } });
+    $("msg").textContent = added ? "✔ MGR added to your wallet." : "Cancelled.";
+  } catch (e) { $("msg").textContent = e?.message || "Could not add the token."; }
+};
+</script>
+</body>
+</html>

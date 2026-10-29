@@ -1,0 +1,23 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "MyToken.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// Minimal fixed-supply ERC-20. The whole supply is minted to the deployer;\n/// there is no owner, no mint function and no way to freeze balances.\n/// Holders can burn their own tokens.\ncontract MyToken {\n    string public name;\n    string public symbol;\n    uint8 public immutable decimals;\n    uint256 public totalSupply;\n\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n\n    event Transfer(address indexed from, address indexed to, uint256 value);\n    event Approval(address indexed owner, address indexed spender, uint256 value);\n\n    constructor(string memory name_, string memory symbol_, uint8 decimals_, uint256 supply_) {\n        name = name_;\n        symbol = symbol_;\n        decimals = decimals_;\n        totalSupply = supply_;\n        balanceOf[msg.sender] = supply_;\n        emit Transfer(address(0), msg.sender, supply_);\n    }\n\n    function transfer(address to, uint256 value) external returns (bool) {\n        _transfer(msg.sender, to, value);\n        return true;\n    }\n\n    function approve(address spender, uint256 value) external returns (bool) {\n        require(spender != address(0), \"approve to zero\");\n        allowance[msg.sender][spender] = value;\n        emit Approval(msg.sender, spender, value);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 value) external returns (bool) {\n        uint256 allowed = allowance[from][msg.sender];\n        if (allowed != type(uint256).max) {\n            require(allowed >= value, \"insufficient allowance\");\n            allowance[from][msg.sender] = allowed - value;\n        }\n        _transfer(from, to, value);\n        return true;\n    }\n\n    function burn(uint256 value) external {\n        require(balanceOf[msg.sender] >= value, \"insufficient balance\");\n        balanceOf[msg.sender] -= value;\n        totalSupply -= value;\n        emit Transfer(msg.sender, address(0), value);\n    }\n\n    function _transfer(address from, address to, uint256 value) internal {\n        require(to != address(0), \"transfer to zero\");\n        require(balanceOf[from] >= value, \"insufficient balance\");\n        balanceOf[from] -= value;\n        balanceOf[to] += value;\n        emit Transfer(from, to, value);\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "evmVersion": "paris",
+    "outputSelection": {
+      "*": {
+        "MyToken": [
+          "abi",
+          "evm.bytecode.object"
+        ]
+      }
+    }
+  }
+}

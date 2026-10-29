@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My EVM Wallet</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="build/MyToken.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #16181d; --muted: #6b7280;
+    --border: #e3e5ea; --accent: #2f6fed; --accent-text: #ffffff;
+    --danger: #d93025; --ok: #188038; --warn-bg: #fff6e0; --warn-text: #7a5300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --card: #181b21; --text: #e8eaed; --muted: #9aa0a6;
+      --border: #2a2e36; --accent: #5b8cff; --accent-text: #0f1115;
+      --danger: #f28b82; --ok: #81c995; --warn-bg: #3a2f12; --warn-text: #f5d38a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Myanmar Text", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 24px 16px 48px; }
+  a { color: var(--accent); }
+  h1 { font-size: 20px; margin: 0 0 16px; display: flex; justify-content: space-between; align-items: center; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit; }
+  textarea { resize: vertical; min-height: 70px; }
+  button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card);
+    color: var(--text); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  .warn { background: var(--warn-bg); color: var(--warn-text); padding: 10px 12px; border-radius: 8px; font-size: 13px; margin: 10px 0; }
+  .err { color: var(--danger); font-size: 13px; min-height: 1em; margin-top: 8px; }
+  .ok { color: var(--ok); }
+  .hidden { display: none !important; }
+  .balance { font-size: 28px; font-weight: 700; margin: 4px 0; }
+  .tok { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); gap: 8px; }
+  .tok:first-child { border-top: 0; }
+  .tok .name { font-weight: 600; }
+  .tok .x { padding: 2px 8px; font-size: 12px; }
+  .tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
+  @media (max-width: 480px) { .tabs { grid-template-columns: repeat(3, 1fr); } }
+  .hx { display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+  .hx:first-child { border-top: 0; }
+  .hx .amt { font-weight: 600; text-align: right; white-space: nowrap; }
+  .hx .in { color: var(--ok); }
+  .hx .fail { color: var(--danger); }
+  .tabs button { min-width: 0; padding: 10px 2px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  .tabs button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  #qr svg, #qr img { display: block; margin: 12px auto; background: #fff; padding: 8px; border-radius: 8px; }
+  .words { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0; }
+  .words span { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><span>🔐 My EVM Wallet</span><button id="lockBtn" class="hidden">Lock</button></h1>
+
+  <!-- Setup: no wallet saved yet -->
+  <section id="setupView" class="hidden">
+    <div class="card">
+      <h2>Create new wallet · Wallet အသစ်ဖန်တီးမည်</h2>
+      <label>Password (min 8 chars)</label>
+      <input id="newPw" type="password" autocomplete="new-password">
+      <label>Confirm password</label>
+      <input id="newPw2" type="password" autocomplete="new-password">
+      <div style="margin-top:12px"><button class="primary" id="createBtn">Create wallet</button></div>
+      <div class="err" id="createErr"></div>
+    </div>
+    <div class="card">
+      <h2>Import wallet · ရှိပြီးသား Wallet ထည့်မည်</h2>
+      <label>Seed phrase (12/24 words) or private key</label>
+      <textarea id="importSecret" spellcheck="false" autocomplete="off"></textarea>
+      <label>New password for this device</label>
+      <input id="importPw" type="password" autocomplete="new-password">
+      <div style="margin-top:12px"><button class="primary" id="importBtn">Import</button></div>
+      <div class="err" id="importErr"></div>
+    </div>
+  </section>
+
+  <!-- Show seed once after creating -->
+  <section id="seedView" class="hidden">
+    <div class="card">
+      <h2>Your seed phrase · Seed phrase ကို ရေးမှတ်ထားပါ</h2>
+      <div class="warn">ဒီစကားလုံး ၁၂ လုံးကို စာရွက်ပေါ်မှာ ရေးမှတ်ပြီး လုံခြုံတဲ့နေရာမှာ သိမ်းပါ။ ပျောက်သွားရင် Token တွေ ပြန်ယူလို့မရပါ။ ဘယ်သူ့ကိုမှ မပြပါနဲ့။<br>
+      Write these words on paper. Anyone with them controls your funds. Lose them and the funds are gone.</div>
+      <div class="words" id="seedWords"></div>
+      <label><input type="checkbox" id="seedAck" style="width:auto"> I have written it down safely</label>
+      <div style="margin-top:12px"><button class="primary" id="seedDoneBtn" disabled>Continue</button></div>
+    </div>
+  </section>
+
+  <!-- Unlock -->
+  <section id="unlockView" class="hidden">
+    <div class="card">
+      <h2>Unlock wallet · Password ထည့်ပါ</h2>
+      <div class="muted mono" id="savedAddr"></div>
+      <label>Password</label>
+      <input id="unlockPw" type="password" autocomplete="current-password">
+      <div style="margin-top:12px" class="row">
+        <button class="primary" id="unlockBtn">Unlock</button>
+      </div>
+      <div class="err" id="unlockErr"></div>
+      <div style="margin-top:16px"><button class="danger" id="resetBtn">Remove wallet from this device</button></div>
+    </div>
+  </section>
+
+  <!-- Main wallet -->
+  <section id="walletView" class="hidden">
+    <div class="card">
+      <label style="margin-top:0">Network</label>
+      <select id="netSel"></select>
+      <div class="muted" style="margin-top:12px">Address</div>
+      <div class="row" style="align-items:center">
+        <div class="mono" id="addr" style="flex:4"></div>
+        <button id="copyBtn" style="flex:0 0 auto">Copy</button>
+      </div>
+      <div class="balance" id="nativeBal">—</div>
+      <div class="muted" id="netInfo"></div>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="tokens" class="active">Tokens</button>
+      <button data-tab="send">Send</button>
+      <button data-tab="receive">Receive</button>
+      <button data-tab="history">History</button>
+      <button data-tab="create">Create</button>
+      <button data-tab="settings">Settings</button>
+    </div>
+
+    <div class="card tab" id="tab-tokens">
+      <div class="row" style="align-items:center;margin-bottom:6px">
+        <h2 style="margin:0">Tokens</h2>
+        <button id="refreshBtn" style="flex:0 0 auto">↻ Refresh</button>
+      </div>
+      <div id="tokList"></div>
+      <label>Add token by contract address · Token contract ထည့်ရန်</label>
+      <div class="row">
+        <input id="tokAddr" placeholder="0x..." spellcheck="false" style="flex:3">
+        <button id="addTokBtn">Add</button>
+      </div>
+      <div class="err" id="tokErr"></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-send">
+      <h2>Send</h2>
+      <label>Asset</label>
+      <select id="sendAsset"></select>
+      <label>To address</label>
+      <input id="sendTo" placeholder="0x..." spellcheck="false">
+      <label>Amount</label>
+      <div class="row">
+        <input id="sendAmt" inputmode="decimal" placeholder="0.0" style="flex:3">
+        <button id="maxBtn">Max</button>
+      </div>
+      <div style="margin-top:12px"><button class="primary" id="reviewBtn">Review</button></div>
+      <div id="reviewBox" class="hidden">
+        <div class="warn" id="reviewText"></div>
+        <div class="row"><button id="cancelSendBtn">Cancel</button><button class="primary" id="confirmSendBtn">Confirm &amp; send</button></div>
+      </div>
+      <div class="err" id="sendErr"></div>
+      <div id="sendResult" class="muted"></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-receive">
+      <h2>Receive</h2>
+      <div class="muted">Send only <b id="rcvNet"></b> network assets to this address.</div>
+      <div id="qr"></div>
+      <div class="mono" id="rcvAddr" style="text-align:center"></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-history">
+      <div class="row" style="align-items:center;margin-bottom:6px">
+        <h2 style="margin:0">History · ငွေဝင်/ထွက် မှတ်တမ်း</h2>
+        <button id="histBtn" style="flex:0 0 auto">↻ Load</button>
+      </div>
+      <div class="muted" id="histNote">Uses the Etherscan API. Add your API key in Settings first.</div>
+      <div id="histList"></div>
+      <div class="err" id="histErr"></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-create">
+      <h2>Create your own token · ကိုယ်ပိုင် Token ထုတ်မည်</h2>
+      <div class="muted">Deploys a standard ERC-20 on <b id="ctNet"></b>. The whole supply goes to your address. Supply is fixed: nobody (not even you) can mint more later. Holders can burn their own tokens.</div>
+      <label>Token name</label>
+      <input id="ctName" placeholder="My Token" maxlength="50">
+      <div class="row">
+        <div><label>Symbol</label><input id="ctSym" placeholder="MYT" maxlength="11"></div>
+        <div><label>Decimals</label><input id="ctDec" inputmode="numeric" value="18"></div>
+      </div>
+      <label>Total supply</label>
+      <input id="ctSupply" inputmode="decimal" placeholder="1000000">
+      <div style="margin-top:12px"><button class="primary" id="ctReviewBtn">Review</button></div>
+      <div id="ctReviewBox" class="hidden">
+        <div class="warn" id="ctReviewText"></div>
+        <div class="row"><button id="ctCancelBtn">Cancel</button><button class="primary" id="ctConfirmBtn">Confirm &amp; deploy</button></div>
+      </div>
+      <div class="err" id="ctErr"></div>
+      <div id="ctResult" class="muted"></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-settings">
+      <h2>Etherscan API key (for History)</h2>
+      <div class="muted">Get a free key at etherscan.io → API Keys. One key works for BscScan and the other supported chains. It is saved unencrypted in this browser; it can only read public data.</div>
+      <div class="row" style="margin-top:8px">
+        <input id="esKey" type="password" autocomplete="off" spellcheck="false" placeholder="API key" style="flex:3">
+        <button id="esSaveBtn">Save</button>
+      </div>
+      <div class="muted" id="esStatus"></div>
+
+      <h2 style="margin-top:22px">Sign message (prove ownership)</h2>
+      <div class="muted">For BscScan "Verify Address Ownership" and similar. Signing a message never moves funds — but only sign text you understand.</div>
+      <label>Message to sign</label>
+      <textarea id="signMsg" spellcheck="false"></textarea>
+      <div style="margin-top:12px"><button id="signBtn">Sign</button></div>
+      <label>Signature</label>
+      <div class="row" style="align-items:center">
+        <div class="mono" id="signOut" style="flex:4"></div>
+        <button id="signCopyBtn" style="flex:0 0 auto">Copy</button>
+      </div>
+      <div class="err" id="signErr"></div>
+
+      <h2 style="margin-top:22px">Add custom network (EVM)</h2>
+      <label>Name</label><input id="cnName" placeholder="My Chain">
+      <label>RPC URL</label><input id="cnRpc" placeholder="https://...">
+      <div class="row">
+        <div><label>Chain ID</label><input id="cnId" inputmode="numeric"></div>
+        <div><label>Symbol</label><input id="cnSym" placeholder="ETH"></div>
+      </div>
+      <label>Explorer URL (optional)</label><input id="cnExp" placeholder="https://...">
+      <div style="margin-top:12px"><button id="addNetBtn">Add network</button></div>
+      <div class="err" id="netErr"></div>
+
+      <h2 style="margin-top:22px">Backup</h2>
+      <div class="warn">Seed phrase / private key ကို ပြသမယ်ဆိုရင် ဘေးနားမှာ ဘယ်သူမှ မရှိစေနဲ့။</div>
+      <label>Password</label>
+      <input id="revealPw" type="password" autocomplete="current-password">
+      <div style="margin-top:12px"><button id="revealBtn">Show secret</button></div>
+      <div class="mono" id="revealOut" style="margin-top:10px"></div>
+      <div class="err" id="revealErr"></div>
+    </div>
+  </section>
+
+  <p class="muted" style="text-align:center">Keys are encrypted with your password and stored only in this browser. Nothing is sent to any server except blockchain RPC calls.</p>
+</main>
+
+<script>
+const { ethers } = window;
+const LS_KEYSTORE = "mw.keystore";
+const LS_NETS = "mw.customNets";
+const LS_TOKENS = "mw.tokens";
+const LS_NET = "mw.selectedNet";
+const LS_ESKEY = "mw.etherscanKey";
+
+const DEFAULT_NETS = [
+  { id: "eth", name: "Ethereum", rpc: "https://ethereum-rpc.publicnode.com", chainId: 1, symbol: "ETH", explorer: "https://etherscan.io" },
+  { id: "bsc", name: "BNB Smart Chain", rpc: "https://bsc-rpc.publicnode.com", chainId: 56, symbol: "BNB", explorer: "https://bscscan.com" },
+  { id: "polygon", name: "Polygon", rpc: "https://polygon-bor-rpc.publicnode.com", chainId: 137, symbol: "POL", explorer: "https://polygonscan.com" },
+  { id: "arb", name: "Arbitrum One", rpc: "https://arbitrum-one-rpc.publicnode.com", chainId: 42161, symbol: "ETH", explorer: "https://arbiscan.io" },
+  { id: "base", name: "Base", rpc: "https://base-rpc.publicnode.com", chainId: 8453, symbol: "ETH", explorer: "https://basescan.org" },
+  { id: "sepolia", name: "Sepolia (testnet)", rpc: "https://ethereum-sepolia-rpc.publicnode.com", chainId: 11155111, symbol: "SepoliaETH", explorer: "https://sepolia.etherscan.io" },
+];
+const DEFAULT_TOKENS = {
+  eth: [
+    { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", symbol: "USDT", decimals: 6 },
+    { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", symbol: "USDC", decimals: 6 },
+  ],
+  bsc: [{ address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18 }],
+  polygon: [{ address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", symbol: "USDT", decimals: 6 }],
+};
+const ERC20_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+];
+
+let wallet = null;       // unlocked HDNodeWallet/Wallet, in memory only
+let provider = null;
+let pendingTx = null;
+let refreshSeq = 0;
+
+const $ = (id) => document.getElementById(id);
+const show = (id) => {
+  for (const v of ["setupView", "seedView", "unlockView", "walletView"]) $(v).classList.toggle("hidden", v !== id);
+  $("lockBtn").classList.toggle("hidden", id !== "walletView");
+};
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const errMsg = (e) => e?.shortMessage || e?.reason || e?.message || String(e);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function nets() { return [...DEFAULT_NETS, ...load(LS_NETS, [])]; }
+function currentNet() { const id = load(LS_NET, "eth"); return nets().find((n) => n.id === id) || DEFAULT_NETS[0]; }
+function tokensFor(netId) {
+  const all = load(LS_TOKENS, null) ?? DEFAULT_TOKENS;
+  return all[netId] || [];
+}
+function setTokensFor(netId, list) {
+  const all = load(LS_TOKENS, null) ?? structuredClone(DEFAULT_TOKENS);
+  all[netId] = list;
+  save(LS_TOKENS, all);
+}
+function fmt(v, d) {
+  const s = ethers.formatUnits(v, d);
+  const [i, f = ""] = s.split(".");
+  const ft = f.slice(0, 6).replace(/0+$/, "");
+  return ft ? `${i}.${ft}` : i;
+}
+
+// ---------- Setup / unlock ----------
+async function persist(w, pw, btn) {
+  btn.disabled = true; const t = btn.textContent; btn.textContent = "Encrypting…";
+  try { localStorage.setItem(LS_KEYSTORE, await w.encrypt(pw)); }
+  finally { btn.disabled = false; btn.textContent = t; }
+}
+
+$("createBtn").onclick = async () => {
+  $("createErr").textContent = "";
+  const pw = $("newPw").value;
+  if (pw.length < 8) return ($("createErr").textContent = "Password must be at least 8 characters.");
+  if (pw !== $("newPw2").value) return ($("createErr").textContent = "Passwords do not match.");
+  try {
+    const w = ethers.Wallet.createRandom();
+    await persist(w, pw, $("createBtn"));
+    wallet = w;
+    $("seedWords").innerHTML = w.mnemonic.phrase.split(" ").map((x, i) => `<span>${i + 1}. ${esc(x)}</span>`).join("");
+    $("seedAck").checked = false; $("seedDoneBtn").disabled = true;
+    $("newPw").value = $("newPw2").value = "";
+    show("seedView");
+  } catch (e) { $("createErr").textContent = errMsg(e); }
+};
+$("seedAck").onchange = () => ($("seedDoneBtn").disabled = !$("seedAck").checked);
+$("seedDoneBtn").onclick = () => { $("seedWords").innerHTML = ""; enterWallet(); };
+
+$("importBtn").onclick = async () => {
+  $("importErr").textContent = "";
+  const secret = $("importSecret").value.trim().replace(/\s+/g, " ");
+  const pw = $("importPw").value;
+  if (pw.length < 8) return ($("importErr").textContent = "Password must be at least 8 characters.");
+  let w;
+  try {
+    if (/^(0x)?[0-9a-fA-F]{64}$/.test(secret)) w = new ethers.Wallet(secret.startsWith("0x") ? secret : "0x" + secret);
+    else w = ethers.Wallet.fromPhrase(secret.toLowerCase());
+  } catch { return ($("importErr").textContent = "Invalid seed phrase or private key."); }
+  try {
+    await persist(w, pw, $("importBtn"));
+    $("importSecret").value = $("importPw").value = "";
+    wallet = w; enterWallet();
+  } catch (e) { $("importErr").textContent = errMsg(e); }
+};
+
+$("unlockBtn").onclick = async () => {
+  $("unlockErr").textContent = "";
+  const btn = $("unlockBtn"); btn.disabled = true; btn.textContent = "Unlocking…";
+  try {
+    wallet = await ethers.Wallet.fromEncryptedJson(localStorage.getItem(LS_KEYSTORE), $("unlockPw").value);
+    $("unlockPw").value = "";
+    enterWallet();
+  } catch { $("unlockErr").textContent = "Wrong password."; }
+  finally { btn.disabled = false; btn.textContent = "Unlock"; }
+};
+$("unlockPw").onkeydown = (e) => { if (e.key === "Enter") $("unlockBtn").click(); };
+
+$("resetBtn").onclick = () => {
+  if (!confirm("Remove the wallet from this browser? Without your seed phrase the funds cannot be recovered.")) return;
+  if (prompt('Type DELETE to confirm') !== "DELETE") return;
+  localStorage.removeItem(LS_KEYSTORE);
+  boot();
+};
+
+$("lockBtn").onclick = () => { wallet = null; pendingTx = null; $("revealOut").textContent = ""; boot(); };
+
+// ---------- Wallet ----------
+function enterWallet() {
+  show("walletView");
+  $("addr").textContent = $("rcvAddr").textContent = wallet.address;
+  renderNets();
+  switchNet();
+}
+
+function renderNets() {
+  const cur = currentNet().id;
+  $("netSel").innerHTML = nets().map((n) => `<option value="${esc(n.id)}" ${n.id === cur ? "selected" : ""}>${esc(n.name)}</option>`).join("");
+}
+$("netSel").onchange = () => { save(LS_NET, $("netSel").value); switchNet(); };
+
+function switchNet() {
+  const n = currentNet();
+  provider = new ethers.JsonRpcProvider(n.rpc, n.chainId, { staticNetwork: true });
+  $("netInfo").textContent = `Chain ID ${n.chainId}`;
+  $("rcvNet").textContent = $("ctNet").textContent = n.name;
+  cancelCreate();
+  historySeq++; $("histList").innerHTML = ""; $("histErr").textContent = "";
+  if (!$("tab-history").classList.contains("hidden")) loadHistory();
+  const qr = qrcode(0, "M"); qr.addData(wallet.address); qr.make();
+  $("qr").innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2 });
+  cancelReview();
+  refresh();
+}
+
+async function refresh() {
+  const seq = ++refreshSeq;
+  const n = currentNet();
+  const toks = tokensFor(n.id);
+  $("nativeBal").textContent = "…";
+  $("tokList").innerHTML = toks.length ? toks.map((t, i) => `
+    <div class="tok"><div><div class="name">${esc(t.symbol)}</div><div class="muted mono">${esc(t.address)}</div></div>
+    <div style="text-align:right"><div id="tb-${i}">…</div><button class="x" data-rm="${i}">Remove</button></div></div>`).join("")
+    : `<div class="muted">No tokens yet. Add one by contract address below.</div>`;
+  renderSendAssets();
+
+  provider.getBalance(wallet.address).then(
+    (b) => { if (seq === refreshSeq) $("nativeBal").textContent = `${fmt(b, 18)} ${n.symbol}`; },
+    () => { if (seq === refreshSeq) $("nativeBal").textContent = "RPC error"; });
+  toks.forEach((t, i) => {
+    new ethers.Contract(t.address, ERC20_ABI, provider).balanceOf(wallet.address).then(
+      (b) => { if (seq === refreshSeq) $(`tb-${i}`).textContent = fmt(b, t.decimals); },
+      () => { if (seq === refreshSeq) $(`tb-${i}`).textContent = "error"; });
+  });
+}
+$("refreshBtn").onclick = refresh;
+
+$("tokList").onclick = (e) => {
+  const i = e.target.dataset.rm;
+  if (i === undefined) return;
+  const n = currentNet();
+  const list = tokensFor(n.id);
+  list.splice(Number(i), 1);
+  setTokensFor(n.id, list);
+  refresh();
+};
+
+$("addTokBtn").onclick = async () => {
+  $("tokErr").textContent = "";
+  const raw = $("tokAddr").value.trim();
+  if (!ethers.isAddress(raw)) return ($("tokErr").textContent = "Not a valid address.");
+  const address = ethers.getAddress(raw.toLowerCase());
+  const n = currentNet();
+  const list = tokensFor(n.id);
+  if (list.some((t) => t.address.toLowerCase() === address.toLowerCase())) return ($("tokErr").textContent = "Token already added.");
+  const btn = $("addTokBtn"); btn.disabled = true;
+  try {
+    const c = new ethers.Contract(address, ERC20_ABI, provider);
+    const [symbol, decimals] = await Promise.all([c.symbol(), c.decimals()]);
+    list.push({ address, symbol, decimals: Number(decimals) });
+    setTokensFor(n.id, list);
+    $("tokAddr").value = "";
+    refresh();
+  } catch { $("tokErr").textContent = `Could not read an ERC-20 token at this address on ${n.name}.`; }
+  finally { btn.disabled = false; }
+};
+
+// ---------- Send ----------
+function renderSendAssets() {
+  const n = currentNet();
+  $("sendAsset").innerHTML = `<option value="native">${esc(n.symbol)} (native)</option>` +
+    tokensFor(n.id).map((t, i) => `<option value="${i}">${esc(t.symbol)}</option>`).join("");
+}
+function selectedAsset() {
+  const v = $("sendAsset").value;
+  return v === "native" ? null : tokensFor(currentNet().id)[Number(v)];
+}
+
+$("maxBtn").onclick = async () => {
+  $("sendErr").textContent = "";
+  try {
+    const t = selectedAsset();
+    if (t) {
+      const b = await new ethers.Contract(t.address, ERC20_ABI, provider).balanceOf(wallet.address);
+      $("sendAmt").value = ethers.formatUnits(b, t.decimals);
+    } else {
+      const [b, fee] = await Promise.all([provider.getBalance(wallet.address), provider.getFeeData()]);
+      const price = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
+      const v = b - price * 21000n * 12n / 10n;
+      $("sendAmt").value = ethers.formatEther(v > 0n ? v : 0n);
+    }
+  } catch (e) { $("sendErr").textContent = errMsg(e); }
+};
+
+function cancelReview() { pendingTx = null; $("reviewBox").classList.add("hidden"); }
+$("cancelSendBtn").onclick = cancelReview;
+$("sendAsset").onchange = $("sendTo").oninput = $("sendAmt").oninput = cancelReview;
+
+$("reviewBtn").onclick = async () => {
+  $("sendErr").textContent = ""; $("sendResult").textContent = ""; cancelReview();
+  const n = currentNet();
+  const to = $("sendTo").value.trim();
+  if (!ethers.isAddress(to)) return ($("sendErr").textContent = "Invalid recipient address.");
+  const t = selectedAsset();
+  let amount;
+  try { amount = ethers.parseUnits($("sendAmt").value.trim() || "0", t ? t.decimals : 18); }
+  catch { return ($("sendErr").textContent = "Invalid amount."); }
+  if (amount <= 0n) return ($("sendErr").textContent = "Amount must be greater than 0.");
+
+  const btn = $("reviewBtn"); btn.disabled = true;
+  try {
+    const signer = wallet.connect(provider);
+    const have = t
+      ? await new ethers.Contract(t.address, ERC20_ABI, provider).balanceOf(wallet.address)
+      : await provider.getBalance(wallet.address);
+    if (have < amount) return ($("sendErr").textContent = `Insufficient balance (you have ${fmt(have, t ? t.decimals : 18)} ${t ? t.symbol : n.symbol}).`);
+    const req = t
+      ? await new ethers.Contract(t.address, ERC20_ABI, signer).transfer.populateTransaction(ethers.getAddress(to.toLowerCase()), amount)
+      : { to: ethers.getAddress(to.toLowerCase()), value: amount };
+    const [gas, fee] = await Promise.all([signer.estimateGas(req), provider.getFeeData()]);
+    const price = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
+    pendingTx = { req: { ...req, gasLimit: gas * 12n / 10n }, chainId: n.chainId };
+    $("reviewText").innerHTML =
+      `Send <b>${esc($("sendAmt").value.trim())} ${esc(t ? t.symbol : n.symbol)}</b> on <b>${esc(n.name)}</b><br>` +
+      `To: <span class="mono">${esc(ethers.getAddress(to.toLowerCase()))}</span><br>` +
+      `Max network fee ≈ ${fmt(gas * price, 18)} ${esc(n.symbol)}<br>` +
+      `ပို့ပြီးရင် ပြန်ယူလို့ မရပါ — address ကို သေချာစစ်ပါ။`;
+    $("reviewBox").classList.remove("hidden");
+  } catch (e) { $("sendErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+$("confirmSendBtn").onclick = async () => {
+  if (!pendingTx) return;
+  const n = currentNet();
+  if (pendingTx.chainId !== n.chainId) return cancelReview();
+  const btn = $("confirmSendBtn"); btn.disabled = true;
+  try {
+    const tx = await wallet.connect(provider).sendTransaction(pendingTx.req);
+    cancelReview();
+    const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
+    $("sendResult").innerHTML = `Submitted: <span class="mono">${link}</span><br>Waiting for confirmation…`;
+    const rc = await tx.wait();
+    $("sendResult").innerHTML = `<span class="ok">${rc.status === 1 ? "✔ Confirmed" : "✖ Failed"}</span> in block ${rc.blockNumber}: <span class="mono">${link}</span>`;
+    refresh();
+  } catch (e) { $("sendErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+// ---------- Create token ----------
+let pendingDeploy = null;
+function cancelCreate() { pendingDeploy = null; $("ctReviewBox").classList.add("hidden"); }
+$("ctCancelBtn").onclick = cancelCreate;
+for (const f of ["ctName", "ctSym", "ctDec", "ctSupply"]) $(f).oninput = cancelCreate;
+
+$("ctReviewBtn").onclick = async () => {
+  $("ctErr").textContent = ""; $("ctResult").textContent = ""; cancelCreate();
+  if (!window.TOKEN_ARTIFACT) return ($("ctErr").textContent = "build/MyToken.js not found — run `npm run compile` and open the wallet through the local server.");
+  const n = currentNet();
+  const name = $("ctName").value.trim(), symbol = $("ctSym").value.trim();
+  const decimals = Number($("ctDec").value.trim());
+  if (!name) return ($("ctErr").textContent = "Enter a token name.");
+  if (!/^[A-Za-z0-9]{1,11}$/.test(symbol)) return ($("ctErr").textContent = "Symbol: 1–11 letters or digits.");
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) return ($("ctErr").textContent = "Decimals must be 0–18 (18 is standard).");
+  let supply;
+  try { supply = ethers.parseUnits($("ctSupply").value.trim() || "0", decimals); }
+  catch { return ($("ctErr").textContent = "Invalid supply."); }
+  if (supply <= 0n) return ($("ctErr").textContent = "Supply must be greater than 0.");
+
+  const btn = $("ctReviewBtn"); btn.disabled = true;
+  try {
+    const signer = wallet.connect(provider);
+    const factory = new ethers.ContractFactory(TOKEN_ARTIFACT.abi, TOKEN_ARTIFACT.bytecode, signer);
+    const req = await factory.getDeployTransaction(name, symbol, decimals, supply);
+    const [gas, fee, have] = await Promise.all([signer.estimateGas(req), provider.getFeeData(), provider.getBalance(wallet.address)]);
+    const cost = gas * (fee.maxFeePerGas ?? fee.gasPrice ?? 0n);
+    pendingDeploy = { req: { ...req, gasLimit: gas * 12n / 10n }, chainId: n.chainId, name, symbol, decimals };
+    $("ctReviewText").innerHTML =
+      `Create <b>${esc(name)} (${esc(symbol)})</b> on <b>${esc(n.name)}</b><br>` +
+      `Supply: ${esc($("ctSupply").value.trim())} · Decimals: ${decimals}<br>` +
+      `Max network fee ≈ ${fmt(cost, 18)} ${esc(n.symbol)} (you have ${fmt(have, 18)})<br>` +
+      (have < cost ? `<b>Not enough ${esc(n.symbol)} for gas.</b><br>` : "") +
+      `Deploy လုပ်ပြီးရင် Name, Symbol, Supply ကို ပြင်လို့မရတော့ပါ။`;
+    $("ctReviewBox").classList.remove("hidden");
+  } catch (e) { $("ctErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+$("ctConfirmBtn").onclick = async () => {
+  if (!pendingDeploy) return;
+  const n = currentNet();
+  if (pendingDeploy.chainId !== n.chainId) return cancelCreate();
+  const d = pendingDeploy;
+  const btn = $("ctConfirmBtn"); btn.disabled = true;
+  try {
+    const tx = await wallet.connect(provider).sendTransaction(d.req);
+    cancelCreate();
+    const txLink = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
+    $("ctResult").innerHTML = `Submitted: <span class="mono">${txLink}</span><br>Waiting for confirmation…`;
+    const rc = await tx.wait();
+    if (rc.status !== 1 || !rc.contractAddress) throw new Error("Deployment failed.");
+    const address = rc.contractAddress;
+    const list = tokensFor(n.id);
+    if (!list.some((t) => t.address.toLowerCase() === address.toLowerCase())) {
+      list.push({ address, symbol: d.symbol, decimals: d.decimals });
+      setTokensFor(n.id, list);
+    }
+    const addrLink = n.explorer ? `<a href="${esc(n.explorer)}/address/${address}" target="_blank" rel="noopener">${address}</a>` : address;
+    $("ctResult").innerHTML = `<span class="ok">✔ ${esc(d.symbol)} created!</span> Contract address:<br><span class="mono">${addrLink}</span><br>Added to your Tokens list.`;
+    for (const f of ["ctName", "ctSym", "ctSupply"]) $(f).value = "";
+    refresh();
+  } catch (e) { $("ctErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+// ---------- History (Etherscan V2 API) ----------
+let historySeq = 0;
+const esKey = () => { try { return localStorage.getItem(LS_ESKEY) || ""; } catch { return ""; } };
+
+async function esList(chainId, action, key) {
+  const qs = new URLSearchParams({ chainid: chainId, module: "account", action, address: wallet.address,
+    page: 1, offset: 25, sort: "desc", apikey: key });
+  const r = await (await fetch("https://api.etherscan.io/v2/api?" + qs)).json();
+  if (r.status === "1") return r.result;
+  if (/no transactions found/i.test(r.message) || (Array.isArray(r.result) && !r.result.length)) return [];
+  throw new Error(typeof r.result === "string" ? r.result : r.message);
+}
+
+async function loadHistory() {
+  const seq = ++historySeq;
+  const n = currentNet();
+  const key = esKey();
+  $("histErr").textContent = ""; $("histList").innerHTML = "";
+  if (!key) return ($("histNote").textContent = "Add your Etherscan API key in Settings to see history.");
+  $("histNote").textContent = `Loading latest transactions on ${n.name}…`;
+  try {
+    const [txs, toks] = await Promise.all([esList(n.chainId, "txlist", key), esList(n.chainId, "tokentx", key)]);
+    if (seq !== historySeq) return;
+    const me = wallet.address.toLowerCase();
+    const tokenHashes = new Set(toks.map((t) => t.hash));
+    const items = [
+      ...txs.filter((t) => t.contractAddress || !(BigInt(t.value) === 0n && tokenHashes.has(t.hash))).map((t) => ({
+        ts: +t.timeStamp, hash: t.hash, from: t.from, to: t.to, value: BigInt(t.value), symbol: n.symbol, decimals: 18,
+        failed: t.isError === "1", created: !t.to && t.contractAddress ? t.contractAddress : null })),
+      ...toks.map((t) => ({
+        ts: +t.timeStamp, hash: t.hash, from: t.from, to: t.to, value: BigInt(t.value), symbol: t.tokenSymbol,
+        decimals: Number(t.tokenDecimal) || 0, failed: false, created: null })),
+    ].sort((a, b) => b.ts - a.ts).slice(0, 40);
+
+    $("histNote").textContent = items.length ? `Latest ${items.length} on ${n.name}` : `No transactions on ${n.name} yet.`;
+    const short = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
+    $("histList").innerHTML = items.map((t) => {
+      const out = t.from.toLowerCase() === me, inn = t.to?.toLowerCase() === me;
+      const [label, who, sign, cls] =
+        t.created ? ["Created contract", short(t.created), "", ""]
+        : out && inn ? ["To self", "", "", ""]
+        : inn && BigInt(t.from) === 0n ? ["Minted", "new tokens", "+", "in"]
+        : inn ? ["Received", "from " + short(t.from), "+", "in"]
+        : ["Sent", "to " + short(t.to), "−", ""];
+      const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${esc(t.hash)}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+      const amt = t.value > 0n || !t.created ? `${sign}${fmt(t.value, t.decimals)} ${esc(t.symbol)}` : "";
+      return `<div class="hx"><div><div>${link}${t.failed ? ' <span class="fail">(failed)</span>' : ""}</div>
+        <div class="muted mono">${esc(who)}</div><div class="muted">${new Date(t.ts * 1000).toLocaleString()}</div></div>
+        <div class="amt ${t.failed ? "fail" : cls}">${amt}</div></div>`;
+    }).join("");
+  } catch (e) {
+    if (seq !== historySeq) return;
+    $("histNote").textContent = "";
+    $("histErr").textContent = `Could not load history on ${n.name}: ${errMsg(e)}`;
+  }
+}
+$("histBtn").onclick = loadHistory;
+
+$("signBtn").onclick = async () => {
+  $("signErr").textContent = ""; $("signOut").textContent = "";
+  const msg = $("signMsg").value;
+  if (!msg) return ($("signErr").textContent = "Paste the message first.");
+  // Raw transaction hashes are a common phishing trick: signing one can authorize a transfer.
+  if (/^\s*0x[0-9a-fA-F]{64}\s*$/.test(msg)) return ($("signErr").textContent = "Refusing to sign a raw 32-byte hash.");
+  try { $("signOut").textContent = await wallet.signMessage(msg); }
+  catch (e) { $("signErr").textContent = errMsg(e); }
+};
+$("signCopyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText($("signOut").textContent); $("signCopyBtn").textContent = "Copied"; }
+  catch { $("signCopyBtn").textContent = "Copy failed"; }
+  setTimeout(() => ($("signCopyBtn").textContent = "Copy"), 1200);
+};
+
+$("esSaveBtn").onclick = () => {
+  const k = $("esKey").value.trim();
+  try { k ? localStorage.setItem(LS_ESKEY, k) : localStorage.removeItem(LS_ESKEY); } catch {}
+  $("esKey").value = "";
+  $("esStatus").textContent = k ? "Saved." : "Removed.";
+};
+
+// ---------- Tabs / misc ----------
+document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("hidden", x.id !== "tab-" + b.dataset.tab));
+  if (b.dataset.tab === "history" && !$("histList").innerHTML) loadHistory();
+  if (b.dataset.tab === "settings") $("esStatus").textContent = esKey() ? "A key is saved." : "No key saved.";
+});
+$("copyBtn").onclick = async () => {
+  try { await navigator.clipboard.writeText(wallet.address); $("copyBtn").textContent = "Copied"; }
+  catch { $("copyBtn").textContent = "Copy failed"; }
+  setTimeout(() => ($("copyBtn").textContent = "Copy"), 1200);
+};
+
+$("addNetBtn").onclick = async () => {
+  $("netErr").textContent = "";
+  const name = $("cnName").value.trim(), rpc = $("cnRpc").value.trim(), symbol = $("cnSym").value.trim() || "ETH";
+  const chainId = Number($("cnId").value.trim()), explorer = $("cnExp").value.trim().replace(/\/+$/, "");
+  if (!name || !/^https?:\/\//.test(rpc) || !Number.isInteger(chainId) || chainId <= 0)
+    return ($("netErr").textContent = "Name, RPC URL (http/https) and a valid chain ID are required.");
+  if (explorer && !/^https?:\/\//.test(explorer)) return ($("netErr").textContent = "Explorer URL must start with http(s)://");
+  try {
+    const actual = Number((await new ethers.JsonRpcProvider(rpc).getNetwork()).chainId);
+    if (actual !== chainId) return ($("netErr").textContent = `RPC reports chain ID ${actual}, not ${chainId}.`);
+  } catch { return ($("netErr").textContent = "Could not reach that RPC URL."); }
+  const custom = load(LS_NETS, []);
+  const id = "c" + chainId;
+  if (nets().some((n) => n.id === id || n.chainId === chainId)) return ($("netErr").textContent = "A network with this chain ID already exists.");
+  custom.push({ id, name, rpc, chainId, symbol, explorer });
+  save(LS_NETS, custom); save(LS_NET, id);
+  for (const f of ["cnName", "cnRpc", "cnId", "cnSym", "cnExp"]) $(f).value = "";
+  renderNets(); switchNet();
+};
+
+$("revealBtn").onclick = async () => {
+  $("revealErr").textContent = ""; $("revealOut").textContent = "";
+  const btn = $("revealBtn"); btn.disabled = true;
+  try {
+    const w = await ethers.Wallet.fromEncryptedJson(localStorage.getItem(LS_KEYSTORE), $("revealPw").value);
+    $("revealPw").value = "";
+    $("revealOut").textContent = w.mnemonic ? `Seed: ${w.mnemonic.phrase}` : `Private key: ${w.privateKey}`;
+  } catch { $("revealErr").textContent = "Wrong password."; }
+  finally { btn.disabled = false; }
+};
+
+function boot() {
+  if (!window.ethers) { document.querySelector("main").innerHTML = "<div class='card err'>Could not load ethers.js — check your internet connection.</div>"; return; }
+  let ks = null;
+  try { ks = localStorage.getItem(LS_KEYSTORE); } catch {}
+  if (ks) {
+    try { $("savedAddr").textContent = ethers.getAddress("0x" + JSON.parse(ks).address); } catch {}
+    show("unlockView");
+  } else show("setupView");
+}
+boot();
+</script>
+</body>
+</html>

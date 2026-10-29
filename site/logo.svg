@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f7a4a"/>
+      <stop offset="1" stop-color="#064d2e"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="1" stop-color="#e0a526"/>
+    </linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="124" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="110" fill="none" stroke="url(#gold)" stroke-width="6"/>
+  <!-- "M" monogram -->
+  <path d="M68 178 V82 h22 l38 52 38-52 h22 v96 h-22 v-60 l-38 50 -38-50 v60 z" fill="url(#gold)"/>
+</svg>

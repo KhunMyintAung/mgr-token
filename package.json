@@ -1,0 +1,18 @@
+{
+  "name": "my-evm-wallet",
+  "private": true,
+  "scripts": {
+    "compile": "node scripts/compile.js",
+    "verify": "node scripts/verify.js",
+    "serve": "http-server -p 8765 -c-1",
+    "build:dist": "node scripts/build-dist.js",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "ethers": "6.13.2",
+    "http-server": "14.1.1",
+    "qrcode-generator": "1.4.4",
+    "sharp": "0.33.5",
+    "solc": "0.8.26"
+  }
+}
