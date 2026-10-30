@@ -91,6 +91,7 @@ CoinGecko ပေါ်ရောက်ရင် MetaMask, Trust Wallet, PancakeSw
 | Logo (PNG 256×256) | https://token.maharpos.shop/msp2-256.png |
 | Logo (PNG 32×32) | https://token.maharpos.shop/msp2-32.png |
 | Logo (SVG) | https://token.maharpos.shop/msp2.svg |
+| Logo (SVG 32×32, BscScan) | https://token.maharpos.shop/msp2-32.svg |
 | Token list | https://token.maharpos.shop/tokenlist.json |
 | Sourcify | https://repo.sourcify.dev/56/0x9286B899F846fD42e71aa11d5B0bBB9601260E50 |
 
