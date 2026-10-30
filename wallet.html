@@ -379,6 +379,23 @@ const show = (id) => {
 const load = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const errMsg = (e) => e?.shortMessage || e?.reason || e?.message || String(e);
+
+// Waits for a sent transaction by polling for its receipt. tx.wait() gives up on the first
+// RPC error, and free public RPCs answer 403/429 now and then, so a transaction that went
+// through could show as failed. Errors here only slow the polling down.
+async function waitForReceipt(hash, timeoutMs = 10 * 60_000) {
+  const p = provider, until = Date.now() + timeoutMs;
+  let delay = 2000;
+  while (Date.now() < until) {
+    try {
+      const rc = await p.getTransactionReceipt(hash);
+      if (rc) return rc;
+      delay = 2000;
+    } catch { delay = Math.min(delay * 2, 15000); }
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  throw new Error(`Not confirmed after ${timeoutMs / 60_000} minutes. Check the transaction on the explorer: ${hash}`);
+}
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 function nets() { return [...DEFAULT_NETS, ...load(LS_NETS, [])]; }
@@ -627,7 +644,7 @@ $("confirmSendBtn").onclick = async () => {
     cancelReview();
     const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
     $("sendResult").innerHTML = `Submitted: <span class="mono">${link}</span><br>Waiting for confirmation…`;
-    const rc = await tx.wait();
+    const rc = await waitForReceipt(tx.hash);
     $("sendResult").innerHTML = `<span class="ok">${rc.status === 1 ? "✔ Confirmed" : "✖ Failed"}</span> in block ${rc.blockNumber}: <span class="mono">${link}</span>`;
     refresh();
   } catch (e) { $("sendErr").textContent = errMsg(e); }
@@ -723,7 +740,7 @@ $("adConfirmBtn").onclick = async () => {
       if (currentNet().chainId !== a.chainId) { error = "Network changed — stopped."; break; }
       $("adProgress").textContent = `Sending ${done + 1} / ${a.rows.length} → ${r.to.slice(0, 8)}…`;
       const tx = await signer.sendTransaction({ ...(await a.req(r)), gasLimit: a.gasLimit });
-      const rc = await tx.wait();
+      const rc = await waitForReceipt(tx.hash);
       if (rc.status !== 1) { error = `Transaction to ${r.to} failed (${tx.hash}).`; break; }
       done++;
     }
@@ -793,7 +810,7 @@ $("ctConfirmBtn").onclick = async () => {
     cancelCreate();
     const txLink = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
     $("ctResult").innerHTML = `Submitted: <span class="mono">${txLink}</span><br>Waiting for confirmation…`;
-    const rc = await tx.wait();
+    const rc = await waitForReceipt(tx.hash);
     if (rc.status !== 1 || !rc.contractAddress) throw new Error("Deployment failed.");
     const address = rc.contractAddress;
     const list = tokensFor(n.id);
@@ -860,7 +877,7 @@ $("mspConfirmBtn").onclick = async () => {
     cancelMsp();
     const txLink = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
     $("mspResult").innerHTML = `Submitted: <span class="mono">${txLink}</span><br>Waiting for confirmation…`;
-    const rc = await tx.wait();
+    const rc = await waitForReceipt(tx.hash);
     if (rc.status !== 1 || !rc.contractAddress) throw new Error("Deployment failed.");
     const address = rc.contractAddress;
     const list = tokensFor(n.id);
