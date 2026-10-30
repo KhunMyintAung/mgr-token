@@ -64,6 +64,8 @@
   .row > * { flex: 1; }
   .muted { color: var(--muted); font-size: 13px; }
   .mono { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+  details.adv { margin-top: 22px; }
+  details.adv > summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 0; }
   .warn { background: var(--warn-bg); color: var(--warn-text); padding: 10px 12px; border-radius: 8px; font-size: 13px; margin: 10px 0; }
   .err { color: var(--danger); font-size: 13px; min-height: 1em; margin-top: 8px; }
   .ok { color: var(--ok); }
@@ -160,7 +162,7 @@
       <button data-tab="send">Send</button>
       <button data-tab="receive">Receive</button>
       <button data-tab="history">History</button>
-      <button data-tab="create">Create</button>
+      <button data-tab="create">MSP</button>
       <button data-tab="settings">Settings</button>
     </div>
 
@@ -197,7 +199,7 @@
       <div class="err" id="sendErr"></div>
       <div id="sendResult" class="muted"></div>
 
-      <h2 style="margin-top:26px">Airdrop · အများဆီ တစ်ခါတည်း ပို့ရန်</h2>
+      <details class="adv"><summary>Airdrop · အများဆီ တစ်ခါတည်း ပို့ရန်</summary>
       <div class="muted">One address per line. Add an amount after a comma to override the default, e.g. <span class="mono">0xabc…, 50</span>. Up to 200 lines; each one is a separate transaction.</div>
       <label>Asset</label>
       <select id="adAsset"></select>
@@ -216,6 +218,7 @@
       </div>
       <div class="err" id="adErr"></div>
       <div id="adResult" class="muted"></div>
+      </details>
     </div>
 
     <div class="card tab hidden" id="tab-receive">
@@ -238,6 +241,17 @@
     </div>
 
     <div class="card tab hidden" id="tab-create">
+      <h2>Mahar Shwe Point (MSP)</h2>
+      <div id="gaInfo" class="muted">…</div>
+      <div style="margin-top:12px" id="gaBtnBox"><button class="primary" id="gaBtn">MSP အကုန် ဒီ Wallet ထဲ ထည့်မည် · Get all MSP</button></div>
+      <div id="gaReviewBox" class="hidden">
+        <div class="warn" id="gaReviewText"></div>
+        <div class="row"><button id="gaCancelBtn">Cancel</button><button class="primary" id="gaConfirmBtn">Confirm</button></div>
+      </div>
+      <div class="err" id="gaErr"></div>
+      <div id="gaResult" class="muted"></div>
+
+      <details class="adv"><summary>Advanced · အဆင့်မြင့် (မလိုရင် မဖွင့်ပါနဲ့)</summary>
       <h2>Create your own token · ကိုယ်ပိုင် Token ထုတ်မည်</h2>
       <div class="muted">Deploys a standard ERC-20 on <b id="ctNet"></b>. The whole supply goes to your address. Supply is fixed: nobody (not even you) can mint more later. Holders can burn their own tokens.</div>
       <label>Token name</label>
@@ -306,6 +320,7 @@
       </div>
       <div class="err" id="mmErr"></div>
       <div id="mmResult" class="muted"></div>
+      </details>
     </div>
 
     <div class="card tab hidden" id="tab-settings">
@@ -557,6 +572,7 @@ function switchNet() {
   const qr = qrcode(0, "M"); qr.addData(wallet.address); qr.make();
   $("qr").innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2 });
   cancelReview();
+  if (!$("tab-create").classList.contains("hidden")) loadGa();
   refresh();
 }
 
@@ -949,6 +965,7 @@ const MSP_MANAGE_ABI = [
   "function dailyLimit() view returns (uint256)", "function mintableNow() view returns (uint256)", "function mintingPaused() view returns (bool)",
   "function mintBatch(uint256 batchId, address[] to, uint256[] amounts)",
   "function setMinter(address)", "function setDailyLimit(uint256)", "function setMintingPaused(bool)",
+  "function balanceOf(address) view returns (uint256)",
 ];
 let mm = null, pendingMm = null;
 $("mmAddr").value = "0x9286B899F846fD42e71aa11d5B0bBB9601260E50";
@@ -1043,6 +1060,79 @@ $("mmConfirmBtn").onclick = async () => {
     refresh();
   } catch (e) { $("mmErr").textContent = errMsg(e); }
   finally { btn.disabled = false; }
+};
+
+// ---------- Get all MSP ----------
+// One button for the owner: make this wallet the minter, unpause and lift the daily limit
+// if they stand in the way, then mint everything the cap still allows into this wallet.
+let pendingGa = null, gaBusy = false;
+function cancelGa() { pendingGa = null; $("gaReviewBox").classList.add("hidden"); }
+$("gaCancelBtn").onclick = cancelGa;
+
+async function loadGa(keepErr = false) {
+  if (gaBusy) return;
+  cancelGa(); if (!keepErr) $("gaErr").textContent = "";
+  $("gaBtnBox").classList.add("hidden");
+  if (currentNet().id !== "bsc") return ($("gaInfo").textContent = "Network ကို BNB Smart Chain ပြောင်းပါ။");
+  $("gaInfo").textContent = "Loading…";
+  try {
+    const c = new ethers.Contract(MSP_ADDRESS, MSP_MANAGE_ABI, provider);
+    const [owner, minter, cap, minted, room, paused, bal] = await Promise.all([
+      c.owner(), c.minter(), c.cap(), c.totalMinted(), c.mintableNow(), c.mintingPaused(), c.balanceOf(wallet.address)]);
+    const left = cap - minted, me = wallet.address.toLowerCase();
+    $("gaInfo").innerHTML = `ဒီ Wallet ထဲမှာ: <b>${fmt(bal, 18)} MSP</b><br>ထပ်ထုတ်လို့ ရသေးတာ: <b>${fmt(left, 18)} MSP</b>`;
+    if (owner.toLowerCase() !== me) return ($("gaErr").textContent = `MSP Owner wallet (${owner}) နဲ့ ဝင်မှ ထုတ်လို့ရပါမယ်။`);
+    if (left === 0n) return ($("gaResult").textContent = "MSP အားလုံး ထုတ်ပြီးပါပြီ။");
+    const steps = [];
+    if (minter.toLowerCase() !== me) steps.push({ label: "ထုတ်ခွင့်ကို ဒီ Wallet ဆီ ယူမယ်", method: "setMinter", args: [wallet.address] });
+    if (paused) steps.push({ label: "ထုတ်ခြင်း ပြန်ဖွင့်မယ်", method: "setMintingPaused", args: [false] });
+    if (room < left) steps.push({ label: "တစ်ရက်ထုတ်ခွင့် ကန့်သတ်ချက် ဖြုတ်မယ်", method: "setDailyLimit", args: [cap] });
+    steps.push({ label: `<b>${fmt(left, 18)} MSP</b> ကို ဒီ Wallet ထဲ ထုတ်ထည့်မယ်`, method: "mintBatch",
+      args: () => [BigInt(Date.now()) * 1000n, [wallet.address], [left]] });
+    pendingGa = { steps, chainId: currentNet().chainId };
+    $("gaBtnBox").classList.remove("hidden");
+  } catch (e) { $("gaInfo").textContent = ""; $("gaErr").textContent = errMsg(e); }
+}
+
+$("gaBtn").onclick = async () => {
+  if (!pendingGa) return;
+  $("gaErr").textContent = ""; $("gaResult").textContent = "";
+  try {
+    const fee = await provider.getFeeData(), price = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
+    // Later steps can't be estimated before the earlier ones land, so use generous figures.
+    const gas = BigInt(pendingGa.steps.length - 1) * 60000n + 150000n;
+    $("gaReviewText").innerHTML = pendingGa.steps.map((st, i) => `${i + 1}. ${st.label}`).join("<br>") +
+      `<br><br>Transaction ${pendingGa.steps.length} ခု · Gas ခ အများဆုံး ≈ ${fmt(gas * price, 18)} ${esc(currentNet().symbol)}`;
+    $("gaReviewBox").classList.remove("hidden");
+  } catch (e) { $("gaErr").textContent = errMsg(e); }
+};
+
+$("gaConfirmBtn").onclick = async () => {
+  const d = pendingGa;
+  if (!d || d.chainId !== currentNet().chainId) return cancelGa();
+  $("gaReviewBox").classList.add("hidden"); $("gaBtnBox").classList.add("hidden");
+  gaBusy = true;
+  const n = currentNet(), signer = wallet.connect(provider), c = new ethers.Contract(MSP_ADDRESS, MSP_MANAGE_ABI, signer);
+  try {
+    // Nonces are counted here: right after a receipt, an RPC can still report the old count.
+    let nonce = await provider.getTransactionCount(wallet.address, "latest");
+    for (const [i, st] of d.steps.entries()) {
+      $("gaResult").innerHTML = `${i + 1}/${d.steps.length}: ${st.label}…`;
+      const args = typeof st.args === "function" ? st.args() : st.args;
+      const req = await c[st.method].populateTransaction(...args);
+      // The RPC node may not have seen the previous step yet, so a revert gets a few retries.
+      let gas;
+      for (let t = 0; ; t++) {
+        try { gas = await signer.estimateGas(req); break; }
+        catch (e) { if (t >= 5) throw e; await new Promise((r) => setTimeout(r, 3000)); }
+      }
+      const tx = await signer.sendTransaction({ ...req, gasLimit: gas * 12n / 10n, nonce: nonce++ });
+      const rc = await waitForReceipt(tx.hash);
+      if (rc.status !== 1) throw new Error(`Step ${i + 1} failed: ${n.explorer ? n.explorer + "/tx/" : ""}${tx.hash}`);
+    }
+    $("gaResult").innerHTML = `<span class="ok">✔ ပြီးပါပြီ။ MSP အားလုံး ဒီ Wallet ထဲ ရောက်ပါပြီ။</span>`;
+  } catch (e) { $("gaErr").textContent = errMsg(e) + " — ခလုတ်ကို ထပ်နှိပ်ရင် ကျန်တာ ဆက်လုပ်ပါမယ်။"; }
+  finally { gaBusy = false; pendingGa = null; loadGa(true); refresh(); }
 };
 
 // ---------- History ----------
@@ -1270,6 +1360,7 @@ document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
   document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("hidden", x.id !== "tab-" + b.dataset.tab));
   if (b.dataset.tab === "history" && !$("histList").innerHTML) loadHistory();
+  if (b.dataset.tab === "create") loadGa();
   if (b.dataset.tab === "settings") $("esStatus").textContent = esKey() ? "A key is saved." : "No key saved.";
 });
 $("copyBtn").onclick = async () => {
