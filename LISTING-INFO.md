@@ -88,9 +88,9 @@ CoinGecko ပေါ်ရောက်ရင် MetaMask, Trust Wallet, PancakeSw
 | Max supply (cap) | 100,000,000 |
 | Contract creator / owner | `0x2569b4dF18c44a67CD98d1a307aA1efE45d0621D` |
 | Website | https://token.maharpos.shop |
-| Logo (PNG 256×256) | https://token.maharpos.shop/msp-256.png |
-| Logo (PNG 32×32) | https://token.maharpos.shop/msp-32.png |
-| Logo (SVG) | https://token.maharpos.shop/msp.svg |
+| Logo (PNG 256×256) | https://token.maharpos.shop/msp2-256.png |
+| Logo (PNG 32×32) | https://token.maharpos.shop/msp2-32.png |
+| Logo (SVG) | https://token.maharpos.shop/msp2.svg |
 | Token list | https://token.maharpos.shop/tokenlist.json |
 | Sourcify | https://repo.sourcify.dev/56/0x9286B899F846fD42e71aa11d5B0bBB9601260E50 |
 
