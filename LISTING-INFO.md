@@ -73,3 +73,46 @@ Logo ထည့်တာ (Enhanced Token Info) က ~$299 — မလိုပါ�
 
 ရောင်းဝယ်မှု (volume) နဲ့ liquidity နည်းနေရင် ငြင်းပါမယ်။ Community ကြီးလာ၊ ရောင်းဝယ်မှု ရှိလာမှ လျှောက်ပါ။
 CoinGecko ပေါ်ရောက်ရင် MetaMask, Trust Wallet, PancakeSwap တွေမှာ logo အလိုလိုပေါ်ပါတယ်။
+
+---
+
+# MSP — Mahar Shwe Point
+
+| Field | Value |
+|---|---|
+| Token name | Mahar Shwe Point |
+| Symbol | MSP |
+| Network | BNB Smart Chain (BEP-20, chain ID 56) |
+| Contract | `0x9286B899F846fD42e71aa11d5B0bBB9601260E50` |
+| Decimals | 18 |
+| Max supply (cap) | 100,000,000 |
+| Contract creator / owner | `0x2569b4dF18c44a67CD98d1a307aA1efE45d0621D` |
+| Website | https://token.maharpos.shop |
+| Logo (PNG 256×256) | https://token.maharpos.shop/msp-256.png |
+| Logo (PNG 32×32) | https://token.maharpos.shop/msp-32.png |
+| Logo (SVG) | https://token.maharpos.shop/msp.svg |
+| Token list | https://token.maharpos.shop/tokenlist.json |
+| Sourcify | https://repo.sourcify.dev/56/0x9286B899F846fD42e71aa11d5B0bBB9601260E50 |
+
+**Short description (EN)**
+
+> MSP (Mahar Shwe Point) is the loyalty point of Mahar POS: shops give it to customers on their purchases. Capped at 100,000,000, minted only by the Mahar POS server within a daily limit; nobody can freeze or take holders' points.
+
+**ဖော်ပြချက် (MM)**
+
+> MSP (Mahar Shwe Point) သည် Mahar POS သုံးဆိုင်များက ဝယ်သူများကို ပေးသော Loyalty Point ဖြစ်သည်။ အများဆုံး 100,000,000 သာ ထုတ်နိုင်ပြီး Mahar POS server ကသာ နေ့စဉ်ကန့်သတ်ချက်အတွင်း ထုတ်ပေးသည်။ မည်သူမျှ ကိုင်ဆောင်သူ၏ point ကို ပိတ်ခြင်း၊ ယူခြင်း မပြုနိုင်ပါ။
+
+## BscScan — Source verify (အခမဲ့)
+
+1. https://bscscan.com/verifyContract?a=0x9286B899F846fD42e71aa11d5B0bBB9601260E50
+2. Compiler Type: **Solidity (Standard-Json-Input)** · Compiler Version: **v0.8.26+commit.8a97fa7a** · License: **MIT (3)** → Continue
+3. GitHub ပေါ်က `build/MaharShwePoint.standard-input.json` ကို download လုပ်ပြီး upload:
+   https://github.com/KhunMyintAung/mgr-token/blob/main/build/MaharShwePoint.standard-input.json (Raw → Save as)
+4. Constructor Arguments ABI-encoded (တောင်းရင် ဒါကို paste):
+   `0000000000000000000000002569b4df18c44a67cd98d1a307aa1efe45d0621d0000000000000000000000002b11e09fe87bcacdce52701d0ad7056808df751600000000000000000000000000000000000000000052b7d2dcc80cd2e400000000000000000000000000000000000000000000000000152d02c7e14af6800000`
+5. Verify and Publish
+
+## BscScan — Logo (MGR တုန်းကလိုပဲ)
+
+1. https://bscscan.com/verifyAddress → Contract Address: `0x9286B899F846fD42e71aa11d5B0bBB9601260E50` → creator `0x2569…621D` နဲ့ Sign
+2. Token page → More → **Update Token Info** → အပေါ်က ဇယားအတိုင်း ဖြည့် → Submit

@@ -271,6 +271,41 @@
       </div>
       <div class="err" id="mspErr"></div>
       <div id="mspResult" class="muted"></div>
+
+      <h2 style="margin-top:22px">Manage MSP · MSP စီမံရန်</h2>
+      <div class="muted">For the MSP owner and minter. Minting needs this wallet to be the minter: as owner, set the minter to this wallet, mint, then set it back to the POS server wallet so customers keep getting their points.</div>
+      <label>MSP contract</label>
+      <div class="row">
+        <input id="mmAddr" class="mono" spellcheck="false" autocomplete="off" style="flex:4">
+        <button id="mmLoadBtn" style="flex:0 0 auto">Load</button>
+      </div>
+      <div id="mmInfo" class="muted mono" style="margin-top:8px"></div>
+      <div id="mmTools" class="hidden">
+        <label>Mint to (minter only)</label>
+        <div class="row">
+          <input id="mmTo" class="mono" placeholder="0x… (empty = this wallet)" spellcheck="false" autocomplete="off" style="flex:3">
+          <input id="mmAmt" inputmode="decimal" placeholder="Amount" style="flex:1">
+          <button id="mmMintBtn" style="flex:0 0 auto">Mint</button>
+        </div>
+        <label>Minter (owner only)</label>
+        <div class="row">
+          <input id="mmMinter" class="mono" placeholder="0x…" spellcheck="false" autocomplete="off" style="flex:3">
+          <button id="mmMeBtn" style="flex:0 0 auto">Me</button>
+          <button id="mmMinterBtn" style="flex:0 0 auto">Set</button>
+        </div>
+        <label>Daily limit (owner only)</label>
+        <div class="row">
+          <input id="mmDaily" inputmode="decimal" style="flex:3">
+          <button id="mmDailyBtn" style="flex:0 0 auto">Set</button>
+        </div>
+        <div class="row" style="margin-top:12px"><button id="mmPauseBtn">Pause / resume minting</button></div>
+      </div>
+      <div id="mmReviewBox" class="hidden">
+        <div class="warn" id="mmReviewText"></div>
+        <div class="row"><button id="mmCancelBtn">Cancel</button><button class="primary" id="mmConfirmBtn">Confirm</button></div>
+      </div>
+      <div class="err" id="mmErr"></div>
+      <div id="mmResult" class="muted"></div>
     </div>
 
     <div class="card tab hidden" id="tab-settings">
@@ -341,15 +376,17 @@ const DEFAULT_TOKENS = {
   ],
   bsc: [
     { address: "0xc117986212033937fa52F0609843754C8f7DBacD", symbol: "MGR", decimals: 18 },
+    { address: "0x9286B899F846fD42e71aa11d5B0bBB9601260E50", symbol: "MSP", decimals: 18 },
     { address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18 },
   ],
   polygon: [{ address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", symbol: "USDT", decimals: 6 }],
 };
 // Logos served from this site (the CSP blocks remote images), keyed by lower-case address.
 const MGR_ADDRESS = "0xc117986212033937fa52f0609843754c8f7dbacd";
-const KNOWN_LOGOS = { [MGR_ADDRESS]: "site/logo-256.png" };
+const MSP_ADDRESS = "0x9286b899f846fd42e71aa11d5b0bbb9601260e50";
+const KNOWN_LOGOS = { [MGR_ADDRESS]: "site/logo-256.png", [MSP_ADDRESS]: "site/msp-256.png" };
 // Block each token was created in: on-chain History never needs to scan before it.
-const KNOWN_START_BLOCKS = { [MGR_ADDRESS]: 130443869 };
+const KNOWN_START_BLOCKS = { [MGR_ADDRESS]: 130443869, [MSP_ADDRESS]: 130596145 };
 
 function tokenIcon(t) {
   const logo = KNOWN_LOGOS[t.address.toLowerCase()];
@@ -404,6 +441,18 @@ function tokensFor(netId) {
   const all = load(LS_TOKENS, null) ?? DEFAULT_TOKENS;
   return all[netId] || [];
 }
+// Lists saved before MSP existed get it once; removing it afterwards sticks.
+(() => {
+  try {
+    if (localStorage.getItem("mw.mspAdded")) return;
+    const all = load(LS_TOKENS, null);
+    if (all?.bsc && !all.bsc.some((t) => t.address.toLowerCase() === "0x9286b899f846fd42e71aa11d5b0bbb9601260e50")) {
+      all.bsc.splice(1, 0, { address: "0x9286B899F846fD42e71aa11d5B0bBB9601260E50", symbol: "MSP", decimals: 18 });
+      save(LS_TOKENS, all);
+    }
+    localStorage.setItem("mw.mspAdded", "1");
+  } catch { /* storage blocked: the default list already has MSP */ }
+})();
 function setTokensFor(netId, list) {
   const all = load(LS_TOKENS, null) ?? structuredClone(DEFAULT_TOKENS);
   all[netId] = list;
@@ -890,6 +939,109 @@ $("mspConfirmBtn").onclick = async () => {
       `Put this address in Mahar POS (MSP_CONTRACT). Added to your Tokens list.`;
     refresh();
   } catch (e) { $("mspErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+// ---------- Manage MSP ----------
+const MSP_MANAGE_ABI = [
+  "function owner() view returns (address)", "function minter() view returns (address)",
+  "function cap() view returns (uint256)", "function totalMinted() view returns (uint256)", "function totalSupply() view returns (uint256)",
+  "function dailyLimit() view returns (uint256)", "function mintableNow() view returns (uint256)", "function mintingPaused() view returns (bool)",
+  "function mintBatch(uint256 batchId, address[] to, uint256[] amounts)",
+  "function setMinter(address)", "function setDailyLimit(uint256)", "function setMintingPaused(bool)",
+];
+let mm = null, pendingMm = null;
+$("mmAddr").value = "0x9286B899F846fD42e71aa11d5B0bBB9601260E50";
+function cancelMm() { pendingMm = null; $("mmReviewBox").classList.add("hidden"); }
+$("mmCancelBtn").onclick = cancelMm;
+
+$("mmLoadBtn").onclick = () => { $("mmResult").textContent = ""; loadMm(); };
+async function loadMm() {
+  $("mmErr").textContent = ""; cancelMm();
+  const addr = $("mmAddr").value.trim();
+  if (!ethers.isAddress(addr)) return ($("mmErr").textContent = "Enter the MSP contract address.");
+  const btn = $("mmLoadBtn"); btn.disabled = true;
+  try {
+    const c = new ethers.Contract(addr, MSP_MANAGE_ABI, provider);
+    const [owner, minter, cap, minted, supply, daily, room, paused] = await Promise.all([
+      c.owner(), c.minter(), c.cap(), c.totalMinted(), c.totalSupply(), c.dailyLimit(), c.mintableNow(), c.mintingPaused()]);
+    const me = wallet.address.toLowerCase();
+    mm = { addr: ethers.getAddress(addr), owner, minter, isOwner: owner.toLowerCase() === me, isMinter: minter.toLowerCase() === me };
+    $("mmInfo").innerHTML =
+      `Owner: ${esc(owner)}${mm.isOwner ? " (you)" : ""}<br>Minter: ${esc(minter)}${mm.isMinter ? " (you)" : ""}<br>` +
+      `Minted: ${fmt(minted, 18)} / cap ${fmt(cap, 18)} · Supply ${fmt(supply, 18)}<br>` +
+      `Daily limit: ${fmt(daily, 18)} · Mintable now: ${fmt(room, 18)}${paused ? " · <b>PAUSED</b>" : ""}`;
+    $("mmDaily").value = ethers.formatUnits(daily, 18);
+    $("mmTools").classList.remove("hidden");
+  } catch (e) { $("mmErr").textContent = "Not an MSP contract on " + currentNet().name + ": " + errMsg(e); $("mmTools").classList.add("hidden"); }
+  finally { btn.disabled = false; }
+}
+$("mmMeBtn").onclick = () => { $("mmMinter").value = wallet.address; };
+
+/** Estimates the call (which also catches "not owner" / "not minter" before paying gas)
+ *  and shows it for confirmation. */
+async function reviewMm(label, method, args) {
+  $("mmErr").textContent = ""; $("mmResult").textContent = ""; cancelMm();
+  if (!mm) return ($("mmErr").textContent = "Press Load first.");
+  try {
+    const n = currentNet(), signer = wallet.connect(provider);
+    const c = new ethers.Contract(mm.addr, MSP_MANAGE_ABI, signer);
+    const req = await c[method].populateTransaction(...args);
+    const [gas, fee] = await Promise.all([signer.estimateGas(req), provider.getFeeData()]);
+    pendingMm = { req: { ...req, gasLimit: gas * 12n / 10n }, chainId: n.chainId };
+    $("mmReviewText").innerHTML = `${label}<br>Max network fee ≈ ${fmt(gas * (fee.maxFeePerGas ?? fee.gasPrice ?? 0n), 18)} ${esc(n.symbol)}`;
+    $("mmReviewBox").classList.remove("hidden");
+  } catch (e) { $("mmErr").textContent = errMsg(e); }
+}
+
+const MM_NEED_MINTER = "Only the minter can mint. As owner, set the minter to this wallet first (Me → Set).";
+const MM_NEED_OWNER = "Only the owner wallet can do this.";
+$("mmMintBtn").onclick = () => {
+  if (mm && !mm.isMinter) return ($("mmErr").textContent = MM_NEED_MINTER);
+  const to = $("mmTo").value.trim() || wallet.address;
+  if (!ethers.isAddress(to)) return ($("mmErr").textContent = "Invalid address to mint to.");
+  let amt;
+  try { amt = ethers.parseUnits($("mmAmt").value.trim(), 18); } catch { return ($("mmErr").textContent = "Enter an amount."); }
+  if (amt <= 0n) return ($("mmErr").textContent = "Enter an amount.");
+  // Ids from the clock stay far above the POS server's batch numbers (1, 2, 3…).
+  const batchId = BigInt(Date.now()) * 1000n;
+  reviewMm(`Mint <b>${esc($("mmAmt").value.trim())} MSP</b> to <span class="mono">${esc(ethers.getAddress(to))}</span>`, "mintBatch", [batchId, [to], [amt]]);
+};
+$("mmMinterBtn").onclick = () => {
+  if (mm && !mm.isOwner) return ($("mmErr").textContent = MM_NEED_OWNER);
+  const m = $("mmMinter").value.trim();
+  if (!ethers.isAddress(m)) return ($("mmErr").textContent = "Invalid minter address.");
+  reviewMm(`Set the minter to <span class="mono">${esc(ethers.getAddress(m))}</span>` +
+    (m.toLowerCase() === wallet.address.toLowerCase() ? "<br>The POS server cannot send customers' points until you set it back." : ""), "setMinter", [m]);
+};
+$("mmDailyBtn").onclick = () => {
+  if (mm && !mm.isOwner) return ($("mmErr").textContent = MM_NEED_OWNER);
+  let v;
+  try { v = ethers.parseUnits($("mmDaily").value.trim(), 18); } catch { return ($("mmErr").textContent = "Invalid daily limit."); }
+  reviewMm(`Set the daily limit to <b>${esc($("mmDaily").value.trim())} MSP</b>`, "setDailyLimit", [v]);
+};
+$("mmPauseBtn").onclick = async () => {
+  if (!mm) return ($("mmErr").textContent = "Press Load first.");
+  if (!mm.isOwner) return ($("mmErr").textContent = MM_NEED_OWNER);
+  const paused = await new ethers.Contract(mm.addr, MSP_MANAGE_ABI, provider).mintingPaused();
+  reviewMm(paused ? "<b>Resume</b> minting" : "<b>Pause</b> minting (customers' points wait until you resume)", "setMintingPaused", [!paused]);
+};
+
+$("mmConfirmBtn").onclick = async () => {
+  if (!pendingMm) return;
+  const n = currentNet();
+  if (pendingMm.chainId !== n.chainId) return cancelMm();
+  const d = pendingMm, btn = $("mmConfirmBtn"); btn.disabled = true;
+  try {
+    const tx = await wallet.connect(provider).sendTransaction(d.req);
+    cancelMm();
+    const link = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
+    $("mmResult").innerHTML = `Submitted: <span class="mono">${link}</span><br>Waiting for confirmation…`;
+    const rc = await waitForReceipt(tx.hash);
+    $("mmResult").innerHTML = `<span class="ok">${rc.status === 1 ? "✔ Done" : "✖ Failed"}</span>: <span class="mono">${link}</span>`;
+    loadMm();
+    refresh();
+  } catch (e) { $("mmErr").textContent = errMsg(e); }
   finally { btn.disabled = false; }
 };
 

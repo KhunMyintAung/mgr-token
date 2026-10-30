@@ -1,7 +1,7 @@
 {
   "name": "MaharGroup",
-  "timestamp": "2026-10-29T00:00:00.000Z",
-  "version": { "major": 1, "minor": 0, "patch": 0 },
+  "timestamp": "2026-10-30T00:00:00.000Z",
+  "version": { "major": 1, "minor": 1, "patch": 0 },
   "logoURI": "https://token.maharpos.shop/logo-256.png",
   "keywords": ["maharpos", "maharshwe", "myanmar"],
   "tokens": [
@@ -12,6 +12,14 @@
       "symbol": "MGR",
       "decimals": 18,
       "logoURI": "https://token.maharpos.shop/logo-256.png"
+    },
+    {
+      "chainId": 56,
+      "address": "0x9286B899F846fD42e71aa11d5B0bBB9601260E50",
+      "name": "Mahar Shwe Point",
+      "symbol": "MSP",
+      "decimals": 18,
+      "logoURI": "https://token.maharpos.shop/msp-256.png"
     }
   ]
 }
