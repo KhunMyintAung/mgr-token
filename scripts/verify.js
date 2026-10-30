@@ -1,14 +1,16 @@
-// Verifies a deployed MyToken contract on BscScan (or any Etherscan-family explorer)
-// through the Etherscan V2 API.
+// Verifies a deployed MyToken or MaharShwePoint (MSP) contract on BscScan (or any
+// Etherscan-family explorer) through the Etherscan V2 API.
 //
 // Usage (PowerShell):
 //   $env:ETHERSCAN_API_KEY = "<your key>"
 //   npm run verify -- <contractAddress> [chainId] [rpcUrl]
 //
-// Without an API key it only checks that the on-chain code matches contracts/MyToken.sol.
+// Without an API key it only checks that the on-chain code matches the source in contracts/.
 const { ethers } = require("ethers");
 const solc = require("solc");
-const input = require("./solc-input");
+const { inputFor } = require("./solc-input");
+
+const CONTRACTS = ["MyToken", "MaharShwePoint"];
 
 const API = "https://api.etherscan.io/v2/api";
 const RPCS = {
@@ -40,35 +42,37 @@ async function main() {
   if (!rpc) fail(`No default RPC for chain ${chainId}; pass one as the third argument.`);
   const provider = new ethers.JsonRpcProvider(rpc, chainId, { staticNetwork: true });
 
-  const out = JSON.parse(solc.compile(JSON.stringify(input)));
-  const c = out.contracts["MyToken.sol"].MyToken;
-  const creationCode = "0x" + c.evm.bytecode.object;
+  const compiled = CONTRACTS.map((name) => {
+    const input = inputFor(name);
+    const out = JSON.parse(solc.compile(JSON.stringify(input)));
+    return { name, input, code: "0x" + out.contracts[name + ".sol"][name].evm.bytecode.object };
+  });
   const compilerVersion = "v" + solc.version().replace(/\.Emscripten.*$/, "");
 
-  // Constructor arguments: taken from the real deployment transaction when we have an
-  // API key to find it, otherwise rebuilt from the token's current on-chain values.
-  let args;
+  // The creation transaction comes from the explorer when we have an API key, otherwise
+  // from Sourcify. Its data is the creation code followed by the constructor arguments,
+  // which also tells us which contract this is.
+  let txHash;
   if (apiKey) {
     const r = await api({ module: "contract", action: "getcontractcreation", contractaddresses: address });
-    const txHash = Array.isArray(r.result) && r.result[0]?.txHash;
+    txHash = Array.isArray(r.result) && r.result[0]?.txHash;
     if (!txHash) fail(`Could not find the creation transaction: ${typeof r.result === "string" ? r.result : r.message}`);
-    const tx = await provider.getTransaction(txHash);
-    if (!tx.data.toLowerCase().startsWith(creationCode.toLowerCase()))
-      fail("The deployment bytecode does not match contracts/MyToken.sol with the current compiler settings.");
-    args = "0x" + tx.data.slice(creationCode.length);
-    console.log("Creation tx:", txHash);
   } else {
-    const t = new ethers.Contract(address, c.abi, provider);
-    const [name, symbol, decimals, supply] = await Promise.all([t.name(), t.symbol(), t.decimals(), t.totalSupply()]);
-    args = ethers.AbiCoder.defaultAbiCoder().encode(["string", "string", "uint8", "uint256"], [name, symbol, decimals, supply]);
-    console.log(`Token: ${name} (${symbol}), decimals ${decimals}, supply ${ethers.formatUnits(supply, decimals)}`);
+    const r = await fetch(`https://sourcify.dev/server/v2/contract/${chainId}/${address}?fields=deployment`).then((x) => x.json()).catch(() => null);
+    txHash = r?.deployment?.transactionHash;
+    if (!txHash) fail("Could not find the creation transaction without an API key (the contract is not on Sourcify). Set ETHERSCAN_API_KEY.");
   }
+  const tx = await provider.getTransaction(txHash);
+  const c = compiled.find((x) => tx.data.toLowerCase().startsWith(x.code.toLowerCase()));
+  if (!c) fail(`The deployment bytecode matches none of ${CONTRACTS.map((n) => `contracts/${n}.sol`).join(", ")} with the current compiler settings.`);
+  const creationCode = c.code, args = "0x" + tx.data.slice(creationCode.length);
+  console.log(`Creation tx: ${txHash}\nContract: ${c.name}`);
 
   // Simulate the deployment and compare the resulting runtime code with what is on chain.
   const [onChain, simulated] = await Promise.all([provider.getCode(address), provider.call({ data: creationCode + args.slice(2) })]);
   if (onChain === "0x") fail("No contract at that address on this chain.");
-  if (onChain.toLowerCase() !== simulated.toLowerCase()) fail("On-chain code does not match contracts/MyToken.sol.");
-  console.log("✔ On-chain code matches contracts/MyToken.sol (" + compilerVersion + ")");
+  if (onChain.toLowerCase() !== simulated.toLowerCase()) fail(`On-chain code does not match contracts/${c.name}.sol.`);
+  console.log(`✔ On-chain code matches contracts/${c.name}.sol (${compilerVersion})`);
 
   if (!apiKey) {
     console.log("\nSet ETHERSCAN_API_KEY to submit the verification.");
@@ -79,9 +83,9 @@ async function main() {
     module: "contract",
     action: "verifysourcecode",
     contractaddress: address,
-    sourceCode: JSON.stringify(input),
+    sourceCode: JSON.stringify(c.input),
     codeformat: "solidity-standard-json-input",
-    contractname: "MyToken.sol:MyToken",
+    contractname: `${c.name}.sol:${c.name}`,
     compilerversion: compilerVersion,
     constructorArguements: args.slice(2), // (sic) the API spells it this way
   }, true);
