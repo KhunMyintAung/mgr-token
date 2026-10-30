@@ -10,6 +10,10 @@ MSP သည် Mahar POS သုံးသော ဆိုင်များက ဝ
 | ထုတ်ခွင့်ရှိသူ | Minter (POS server wallet) တစ်ခုတည်း |
 | Owner | Minter ပြောင်း၊ Daily limit ပြင်၊ ထုတ်ခြင်း ရပ်နိုင်သည် — ဘယ်သူ့ point ကိုမှ ပိတ်/ယူ မရ |
 | ရနှုန်း | ဆိုင်တစ်ဆိုင်ချင်း Settings → Points မှာ သတ်မှတ် (default 1000 ကျပ် = 1 MSP) |
+| **BNB Smart Chain contract** | `0x9286B899F846fD42e71aa11d5B0bBB9601260E50` |
+| Owner | `0x2569b4dF18c44a67CD98d1a307aA1efE45d0621D` |
+| Minter (POS server) | `0x2B11E09fE87BcACDCe52701D0Ad7056808DF7516` |
+| Sourcify | https://repo.sourcify.dev/56/0x9286B899F846fD42e71aa11d5B0bBB9601260E50 (exact match) |
 
 ## အဆင့် ၁ — POS server မှာ Minter wallet ဖန်တီး
 
