@@ -4,8 +4,25 @@
     {
       "name": "wallet",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "http-server@14.1.1", "-p", "8765", "-c-1"],
+      "runtimeArgs": [
+        "--yes",
+        "http-server@14.1.1",
+        "-p",
+        "8765",
+        "-c-1"
+      ],
       "port": 8765
+    },
+    {
+      "name": "pos",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/Admin/Desktop/mahar-mini-pos",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

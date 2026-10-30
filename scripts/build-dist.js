@@ -32,6 +32,7 @@ const libs = {
   "https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js": ["node_modules/ethers/dist/ethers.umd.min.js", "vendor/ethers-6.13.2.umd.min.js"],
   "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js": ["node_modules/qrcode-generator/qrcode.js", "vendor/qrcode-1.4.4.js"],
   "build/MyToken.js": ["build/MyToken.js", "MyToken.js"],
+  "build/MaharShwePoint.js": ["build/MaharShwePoint.js", "MaharShwePoint.js"],
 };
 let html = fs.readFileSync(p("wallet.html"), "utf8");
 for (const [src, [from, to]] of Object.entries(libs)) {

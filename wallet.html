@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="build/MyToken.js"></script>
+<script src="build/MaharShwePoint.js"></script>
 <style>
   :root {
     --bg: #f4f5f7; --card: #ffffff; --text: #16181d; --muted: #6b7280;
@@ -254,6 +255,22 @@
       </div>
       <div class="err" id="ctErr"></div>
       <div id="ctResult" class="muted"></div>
+
+      <h2 style="margin-top:22px">Mahar Shwe Point (MSP) · Loyalty point</h2>
+      <div class="muted">Deploys the MSP point token on <b id="mspNet"></b> with you (this wallet) as owner. Only the minter (the Mahar POS server's wallet) can create points, at most the daily limit per day and never more than the cap in total. You can change the minter, change the daily limit and pause minting; nobody can freeze or take anyone's points.</div>
+      <label>Minter address (Mahar POS server wallet)</label>
+      <input id="mspMinter" class="mono" placeholder="0x…" spellcheck="false" autocomplete="off">
+      <div class="row">
+        <div><label>Cap (total ever)</label><input id="mspCap" inputmode="decimal" value="100000000"></div>
+        <div><label>Daily limit</label><input id="mspDaily" inputmode="decimal" value="100000"></div>
+      </div>
+      <div style="margin-top:12px"><button class="primary" id="mspReviewBtn">Review</button></div>
+      <div id="mspReviewBox" class="hidden">
+        <div class="warn" id="mspReviewText"></div>
+        <div class="row"><button id="mspCancelBtn">Cancel</button><button class="primary" id="mspConfirmBtn">Confirm &amp; deploy</button></div>
+      </div>
+      <div class="err" id="mspErr"></div>
+      <div id="mspResult" class="muted"></div>
     </div>
 
     <div class="card tab hidden" id="tab-settings">
@@ -465,7 +482,7 @@ function switchNet() {
   // History's parallel log reads as slow as sequential ones.
   provider = new ethers.JsonRpcProvider(n.rpc, n.chainId, { staticNetwork: true, batchMaxCount: 1 });
   $("netInfo").textContent = `Chain ID ${n.chainId}`;
-  $("rcvNet").textContent = $("ctNet").textContent = n.name;
+  $("rcvNet").textContent = $("ctNet").textContent = $("mspNet").textContent = n.name;
   cancelCreate(); cancelAirdrop();
   historySeq++; historyBusy = false; $("histBtn").disabled = $("histMoreBtn").disabled = false;
   $("histList").innerHTML = ""; $("histErr").textContent = ""; $("histNote").textContent = "";
@@ -789,6 +806,73 @@ $("ctConfirmBtn").onclick = async () => {
     for (const f of ["ctName", "ctSym", "ctSupply"]) $(f).value = "";
     refresh();
   } catch (e) { $("ctErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+// ---------- Deploy MSP (loyalty point) ----------
+let pendingMsp = null;
+function cancelMsp() { pendingMsp = null; $("mspReviewBox").classList.add("hidden"); }
+$("mspCancelBtn").onclick = cancelMsp;
+for (const f of ["mspMinter", "mspCap", "mspDaily"]) $(f).oninput = cancelMsp;
+
+$("mspReviewBtn").onclick = async () => {
+  $("mspErr").textContent = ""; $("mspResult").textContent = ""; cancelMsp();
+  if (!window.MSP_ARTIFACT) return ($("mspErr").textContent = "build/MaharShwePoint.js not found — run `npm run compile`.");
+  const n = currentNet();
+  const minter = $("mspMinter").value.trim();
+  if (!ethers.isAddress(minter)) return ($("mspErr").textContent = "Enter the POS server wallet address (0x…).");
+  if (minter.toLowerCase() === wallet.address.toLowerCase())
+    return ($("mspErr").textContent = "Use a separate wallet for the POS server, not this owner wallet.");
+  let cap, daily;
+  try { cap = ethers.parseUnits($("mspCap").value.trim(), 18); daily = ethers.parseUnits($("mspDaily").value.trim(), 18); }
+  catch { return ($("mspErr").textContent = "Invalid cap or daily limit."); }
+  if (cap <= 0n || daily <= 0n || daily > cap) return ($("mspErr").textContent = "Cap and daily limit must be above 0, and the daily limit no more than the cap.");
+
+  const btn = $("mspReviewBtn"); btn.disabled = true;
+  try {
+    const signer = wallet.connect(provider);
+    const factory = new ethers.ContractFactory(MSP_ARTIFACT.abi, MSP_ARTIFACT.bytecode, signer);
+    const req = await factory.getDeployTransaction(wallet.address, ethers.getAddress(minter), cap, daily);
+    const [gas, fee, have] = await Promise.all([signer.estimateGas(req), provider.getFeeData(), provider.getBalance(wallet.address)]);
+    const cost = gas * (fee.maxFeePerGas ?? fee.gasPrice ?? 0n);
+    pendingMsp = { req: { ...req, gasLimit: gas * 12n / 10n }, chainId: n.chainId };
+    $("mspReviewText").innerHTML =
+      `Create <b>Mahar Shwe Point (MSP)</b> on <b>${esc(n.name)}</b><br>` +
+      `Owner: <span class="mono">${esc(wallet.address)}</span> (you)<br>` +
+      `Minter: <span class="mono">${esc(ethers.getAddress(minter))}</span><br>` +
+      `Cap: ${esc($("mspCap").value.trim())} · Daily limit: ${esc($("mspDaily").value.trim())}<br>` +
+      `Max network fee ≈ ${fmt(cost, 18)} ${esc(n.symbol)} (you have ${fmt(have, 18)})<br>` +
+      (have < cost ? `<b>Not enough ${esc(n.symbol)} for gas.</b><br>` : "") +
+      `Cap ကို နောက်မှ ပြင်လို့မရပါ။ Minter နဲ့ Daily limit ကိုတော့ Owner (သင်) က ပြင်နိုင်ပါတယ်။`;
+    $("mspReviewBox").classList.remove("hidden");
+  } catch (e) { $("mspErr").textContent = errMsg(e); }
+  finally { btn.disabled = false; }
+};
+
+$("mspConfirmBtn").onclick = async () => {
+  if (!pendingMsp) return;
+  const n = currentNet();
+  if (pendingMsp.chainId !== n.chainId) return cancelMsp();
+  const d = pendingMsp;
+  const btn = $("mspConfirmBtn"); btn.disabled = true;
+  try {
+    const tx = await wallet.connect(provider).sendTransaction(d.req);
+    cancelMsp();
+    const txLink = n.explorer ? `<a href="${esc(n.explorer)}/tx/${tx.hash}" target="_blank" rel="noopener">${tx.hash}</a>` : tx.hash;
+    $("mspResult").innerHTML = `Submitted: <span class="mono">${txLink}</span><br>Waiting for confirmation…`;
+    const rc = await tx.wait();
+    if (rc.status !== 1 || !rc.contractAddress) throw new Error("Deployment failed.");
+    const address = rc.contractAddress;
+    const list = tokensFor(n.id);
+    if (!list.some((t) => t.address.toLowerCase() === address.toLowerCase())) {
+      list.push({ address, symbol: "MSP", decimals: 18 });
+      setTokensFor(n.id, list);
+    }
+    const addrLink = n.explorer ? `<a href="${esc(n.explorer)}/address/${address}" target="_blank" rel="noopener">${address}</a>` : address;
+    $("mspResult").innerHTML = `<span class="ok">✔ MSP created!</span> Contract address:<br><span class="mono">${addrLink}</span><br>` +
+      `Put this address in Mahar POS (MSP_CONTRACT). Added to your Tokens list.`;
+    refresh();
+  } catch (e) { $("mspErr").textContent = errMsg(e); }
   finally { btn.disabled = false; }
 };
 
